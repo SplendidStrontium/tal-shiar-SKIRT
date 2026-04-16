@@ -1,5 +1,4 @@
-## Tal Shiar SKIRT
-***
+# Tal Shiar SKIRT
 
 Tal Shiar SKIRT is a pipeline that takes in data from hydrodynamic cosmological simulations and runs [SKIRT radiative transfer](https://github.com/SKIRT/SKIRT9), generating images similar to those that might be obtainable with a telescope. 
 
