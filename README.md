@@ -1,2 +1,8 @@
-# tal-shiar-SKIRT
-Pipeline to generate simulated images of galaxies through SKIRT radiative transfer
+## Tal Shiar SKIRT
+***
+
+Tal Shiar SKIRT is a pipeline that takes in data from hydrodynamic cosmological simulations and runs [SKIRT radiative transfer](https://github.com/SKIRT/SKIRT9), generating images similar to those that might be obtainable with a telescope. 
+
+Workflow is heavily inspired by the [NIHAO-SKIRT-Pipeline](https://github.com/ntf229/NIHAO-SKIRT-Pipeline), adapted for initial use on zoom-in elements of the [Romulus simulation](https://mtremmel.github.io/research/romulus.html). 
+
+Project aims to investigate the effect of black hole feedback on star formation in dwarf galaxies.
