@@ -1,0 +1,122 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Tal Shiar SKIRT: r142, no-dust, ExtinctionOnly, UV-NIR, 12 inclinations -->
+<skirt-simulation-hierarchy type="MonteCarloSimulation" format="9" producer="Tal Shiar pipeline">
+  <MonteCarloSimulation userLevel="Regular" simulationMode="ExtinctionOnly" numPackets="1e7">
+    <random type="Random">
+      <Random seed="0"/>
+    </random>
+    <units type="Units">
+      <ExtragalacticUnits fluxOutputStyle="Frequency"/>
+    </units>
+    <cosmology type="Cosmology">
+      <LocalUniverseCosmology/>
+    </cosmology>
+    <sourceSystem type="SourceSystem">
+      <SourceSystem minWavelength="0.1 micron" maxWavelength="2.5 micron" sourceBias="0.5">
+        <sources type="Source">
+          <ParticleSource filename="stars.txt" importVelocity="true" importVelocityDispersion="false" useColumns="" sourceWeight="1" wavelengthBias="0.5">
+            <smoothingKernel type="SmoothingKernel">
+              <CubicSplineSmoothingKernel/>
+            </smoothingKernel>
+            <sedFamily type="SEDFamily">
+              <FSPSSEDFamily imf="Chabrier"/>
+            </sedFamily>
+            <wavelengthBiasDistribution type="WavelengthDistribution">
+              <LogWavelengthDistribution minWavelength="0.1 micron" maxWavelength="2.5 micron"/>
+            </wavelengthBiasDistribution>
+          </ParticleSource>
+          <ParticleSource filename="youngStars.txt" importVelocity="true" importVelocityDispersion="false" useColumns="" sourceWeight="1" wavelengthBias="0.5">
+            <smoothingKernel type="SmoothingKernel">
+              <CubicSplineSmoothingKernel/>
+            </smoothingKernel>
+            <sedFamily type="SEDFamily">
+              <MappingsSEDFamily/>
+            </sedFamily>
+            <wavelengthBiasDistribution type="WavelengthDistribution">
+              <LogWavelengthDistribution minWavelength="0.1 micron" maxWavelength="2.5 micron"/>
+            </wavelengthBiasDistribution>
+          </ParticleSource>
+        </sources>
+      </SourceSystem>
+    </sourceSystem>
+    <mediumSystem type="MediumSystem">
+      <MediumSystem>
+      </MediumSystem>
+    </mediumSystem>
+    <instrumentSystem type="InstrumentSystem">
+      <InstrumentSystem>
+        <defaultWavelengthGrid type="WavelengthGrid">
+          <LogWavelengthGrid minWavelength="0.1 micron" maxWavelength="2.5 micron" numWavelengths="80"/>
+        </defaultWavelengthGrid>
+        <instruments type="Instrument">
+          <FullInstrument instrumentName="i00_00p00deg" distance="100 Mpc" inclination="0.0000 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i01_08p18deg" distance="100 Mpc" inclination="8.1818 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i02_16p36deg" distance="100 Mpc" inclination="16.3636 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i03_24p55deg" distance="100 Mpc" inclination="24.5455 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i04_32p73deg" distance="100 Mpc" inclination="32.7273 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i05_40p91deg" distance="100 Mpc" inclination="40.9091 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i06_49p09deg" distance="100 Mpc" inclination="49.0909 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i07_57p27deg" distance="100 Mpc" inclination="57.2727 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i08_65p45deg" distance="100 Mpc" inclination="65.4545 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i09_73p64deg" distance="100 Mpc" inclination="73.6364 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i10_81p82deg" distance="100 Mpc" inclination="81.8182 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <FullInstrument instrumentName="i11_90p00deg" distance="100 Mpc" inclination="90.0000 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+        </instruments>
+      </InstrumentSystem>
+    </instrumentSystem>
+    <probeSystem type="ProbeSystem">
+      <ProbeSystem>
+        <probes type="Probe">
+        </probes>
+      </ProbeSystem>
+    </probeSystem>
+  </MonteCarloSimulation>
+</skirt-simulation-hierarchy>
