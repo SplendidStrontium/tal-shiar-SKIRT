@@ -83,6 +83,7 @@ def load_snapshot(filepath):
     """
     print(f"Loading snapshot: {filepath}")
     data = pynbody.load(filepath)
+    data.physical_units()
     print(f"  Star particles: {len(data.star)}")
     print(f"  Gas particles:  {len(data.gas)}")
     return data
@@ -99,22 +100,20 @@ def center_snapshot(data):
     We use stars (not gas) because the stellar distribution better traces
     the galaxy center, especially in dwarfs where gas can be offset by feedback.
     """
-    print("Centering snapshot on stellar center of mass...")
+    print("Centering snapshot on stellar density peak (shrinking-sphere)...")
 
-    star_pos_pc = data.star['pos'].in_units('pc')
-    star_mass_msol = data.star['mass'].in_units('Msol')
-    total_mass = float(star_mass_msol.sum())
+    # Shrinking-sphere centering locks onto the main galaxy's densest peak,
+    # ignoring satellites and extended halo stars. move_all=True ensures the
+    # translation is applied to the parent snapshot, not just the stellar SubSnap.
+    pynbody.analysis.halo.center(data.s, mode='ssc', move_all=True)
 
-    com_pc = np.array([
-        float((star_pos_pc[:, i] * star_mass_msol).sum() / total_mass)
-        for i in range(3)
-    ])
-    print(f"  Stellar COM (pc): ({com_pc[0]:.2f}, {com_pc[1]:.2f}, {com_pc[2]:.2f})")
-
-    # Translate the entire snapshot. pynbody handles unit conversion internally
-    # when we pass a SimArray with explicit units.
-    com_simarr = pynbody.array.SimArray(com_pc, 'pc')
-    data['pos'] -= com_simarr
+    # Verify centering propagated correctly
+    com_check = (data.s['mass'].reshape(-1,1) * data.s['pos']).sum(axis=0) / data.s['mass'].sum()
+    median_check = np.median(data.s['pos'], axis=0)
+    print(f"  Post-centering stellar COM:    [{com_check[0]:+.3f}, {com_check[1]:+.3f}, {com_check[2]:+.3f}] kpc")
+    print(f"  Post-centering stellar median: [{median_check[0]:+.3f}, {median_check[1]:+.3f}, {median_check[2]:+.3f}] kpc")
+    if np.linalg.norm(median_check) > 0.5:
+        print(f"  WARNING: stellar median is {np.linalg.norm(median_check):.2f} kpc from origin — centering may have failed")
 
     print("  Snapshot centered at origin.")
 
