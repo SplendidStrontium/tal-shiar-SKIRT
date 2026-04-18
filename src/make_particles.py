@@ -6,10 +6,27 @@ data into numpy arrays formatted for SKIRT radiative transfer.
 
 What this script does:
     1. Loads the simulation snapshot with pynbody
-    2. Converts all quantities to physical units (pc, Msol, km/s, yr)
-    3. Centers the galaxy at the origin (SKIRT expects this)
-    4. Applies a spatial cut to remove outlier particles
-    5. Saves particle arrays as .npy files for SKIRT
+    2. Centers the pynbody snapshot on the stellar center-of-mass
+    3. Reorients the snapshot so the disk's angular momentum vector aligns
+       with +z (face-on in the x-y plane). This makes downstream inclination
+       angles physically meaningful: cos(i) = |v_hat . z_hat|.
+    4. Converts all quantities to physical units (pc, Msol, km/s, yr)
+    5. Applies a spatial cut to remove outlier particles
+    6. Saves particle arrays as .npy files for SKIRT
+
+Orientation correction (new in this version):
+    The galaxy disk is not guaranteed to be aligned with the simulation's x-y
+    plane. Without reorientation, the viewing directions produced by
+    sampleOrientations.py have no well-defined inclination, and A(lambda, i)
+    vs inclination plots are meaningless. We fix this by rotating the snapshot
+    so the angular momentum vector of a disk tracer (cold gas preferred, young
+    stars as fallback) points along +z BEFORE extracting particle arrays.
+
+    Tracer selection is a cascading fallback:
+        1. Cold gas (T < 3e4 K) within 10 kpc, if mass > 1e8 Msol
+        2. Young stars (age < 1 Gyr) within 10 kpc, if mass > 1e7 Msol
+        3. All stars within 10 kpc, with a loud warning (galaxy may be
+           spheroidal and inclination interpretation is suspect)
 
 What this script does NOT do (yet):
     - ageSmooth: a technique that splits each star particle into ~50 sub-particles
@@ -26,22 +43,41 @@ What this script does NOT do (yet):
 Adapted from NIHAO-SKIRT-Pipeline/bin/makeParticles.py
 Key differences from NIHAO version:
     - No halo catalogue lookup (Romulus data is already zoomed in on one halo)
-    - Uses center of mass for centering instead of bounding box midpoint
-    - Field mapping: uses 'smooth' (not 'eps'), 'mass' (no 'massform'), 
+    - Uses pynbody-native centering on the stellar center-of-mass
+    - Applies orientation correction via pynbody.analysis.angmom.faceon before extraction
+    - Field mapping: uses 'smooth' (not 'eps'), 'mass' (no 'massform'),
       'age' derived from 'tform'
 """
 
 import pynbody
+import pynbody.analysis
 import numpy as np
 import os
 import argparse
+import warnings
 from timeit import default_timer as timer
+
+
+# ---------------------------------------------------------------------------
+# Tracer thresholds for orientation correction
+# ---------------------------------------------------------------------------
+# These are defaults chosen to catch common Romulus edge cases.
+# - COLD_GAS_TEMP_K: upper temperature for "cold" gas (roughly the neutral/molecular phase)
+# - TRACER_RADIUS_KPC: radial cut for angular momentum computation (0.1 R_vir proxy)
+# - MIN_COLD_GAS_MASS / MIN_YOUNG_STAR_MASS: below these thresholds, fall back
+#   to the next tracer. Romulus galaxies with strong BH feedback may have blown
+#   out their cold gas, so the fallback is important.
+COLD_GAS_TEMP_K = 3e4
+YOUNG_STAR_AGE_YR = 1e9
+TRACER_RADIUS_KPC = 10.0
+MIN_COLD_GAS_MASS = 1e8
+MIN_YOUNG_STAR_MASS = 1e7
 
 
 def load_snapshot(filepath):
     """
     Load a tipsy snapshot with pynbody.
-    
+
     pynbody automatically finds the .param file in the same directory,
     which provides cosmological parameters and unit conversions.
     """
@@ -52,16 +88,128 @@ def load_snapshot(filepath):
     return data
 
 
+def center_snapshot(data):
+    """
+    Center the pynbody snapshot on the stellar center of mass.
+
+    This is done on the pynbody SimSnap itself (not on extracted arrays) so
+    that pynbody.analysis.angmom.faceon() downstream computes angular momentum in
+    a frame where the galaxy is at the origin. faceon() assumes this.
+
+    We use stars (not gas) because the stellar distribution better traces
+    the galaxy center, especially in dwarfs where gas can be offset by feedback.
+    """
+    print("Centering snapshot on stellar center of mass...")
+
+    star_pos_pc = data.star['pos'].in_units('pc')
+    star_mass_msol = data.star['mass'].in_units('Msol')
+    total_mass = float(star_mass_msol.sum())
+
+    com_pc = np.array([
+        float((star_pos_pc[:, i] * star_mass_msol).sum() / total_mass)
+        for i in range(3)
+    ])
+    print(f"  Stellar COM (pc): ({com_pc[0]:.2f}, {com_pc[1]:.2f}, {com_pc[2]:.2f})")
+
+    # Translate the entire snapshot. pynbody handles unit conversion internally
+    # when we pass a SimArray with explicit units.
+    com_simarr = pynbody.array.SimArray(com_pc, 'pc')
+    data['pos'] -= com_simarr
+
+    print("  Snapshot centered at origin.")
+
+
+def select_orientation_tracer(data):
+    """
+    Pick the best tracer for defining the disk plane.
+
+    Cascading fallback:
+        1. Cold gas (T < COLD_GAS_TEMP_K) within TRACER_RADIUS_KPC
+        2. Young stars (age < YOUNG_STAR_AGE_YR) within TRACER_RADIUS_KPC
+        3. All stars within TRACER_RADIUS_KPC (with warning)
+
+    Returns:
+        tracer_subsnap: pynbody SubSnap to pass to faceon()
+        tracer_name:    string describing the tracer (for logging/CSV)
+    """
+    print("Selecting orientation tracer...")
+
+    # Compute radius in kpc for each gas/star particle
+    gas_r_kpc = np.sqrt((data.gas['pos'].in_units('kpc') ** 2).sum(axis=1))
+    star_r_kpc = np.sqrt((data.star['pos'].in_units('kpc') ** 2).sum(axis=1))
+
+    # --- Attempt 1: cold gas ---
+    gas_temp_k = data.gas['temp'].view(np.ndarray)
+    cold_gas_mask = (gas_temp_k < COLD_GAS_TEMP_K) & (gas_r_kpc < TRACER_RADIUS_KPC)
+    cold_gas_mass = float(data.gas['mass'].in_units('Msol')[cold_gas_mask].sum())
+    print(f"  Cold gas (T<{COLD_GAS_TEMP_K:.0e}K, r<{TRACER_RADIUS_KPC}kpc): "
+          f"{cold_gas_mask.sum()} particles, {cold_gas_mass:.2e} Msol")
+
+    if cold_gas_mass > MIN_COLD_GAS_MASS:
+        print(f"  -> Using cold gas as orientation tracer.")
+        return data.gas[cold_gas_mask], 'cold_gas'
+
+    # --- Attempt 2: young stars ---
+    star_age_yr = data.star['age'].in_units('yr').view(np.ndarray)
+    young_star_mask = (star_age_yr < YOUNG_STAR_AGE_YR) & (star_r_kpc < TRACER_RADIUS_KPC)
+    young_star_mass = float(data.star['mass'].in_units('Msol')[young_star_mask].sum())
+    print(f"  Young stars (age<{YOUNG_STAR_AGE_YR:.0e}yr, r<{TRACER_RADIUS_KPC}kpc): "
+          f"{young_star_mask.sum()} particles, {young_star_mass:.2e} Msol")
+
+    if young_star_mass > MIN_YOUNG_STAR_MASS:
+        print(f"  -> Cold gas too sparse. Using young stars as orientation tracer.")
+        return data.star[young_star_mask], 'young_stars'
+
+    # --- Attempt 3: all stars (warn) ---
+    all_star_mask = star_r_kpc < TRACER_RADIUS_KPC
+    all_star_mass = float(data.star['mass'].in_units('Msol')[all_star_mask].sum())
+    warnings.warn(
+        f"Neither cold gas ({cold_gas_mass:.2e} Msol) nor young stars "
+        f"({young_star_mass:.2e} Msol) meet the mass threshold for reliable "
+        f"disk orientation. Falling back to all stars within {TRACER_RADIUS_KPC} kpc "
+        f"({all_star_mass:.2e} Msol). Galaxy may be spheroidal, disturbed, or "
+        f"quenched — inclination interpretation is suspect. Run galaxy_diagnostic.py "
+        f"on this galaxy to assess whether it has a real disk.",
+        RuntimeWarning,
+    )
+    return data.star[all_star_mask], 'all_stars_fallback'
+
+
+def orient_faceon(data):
+    """
+    Rotate the snapshot so the tracer's angular momentum points along +z.
+
+    After this call, the disk (if one exists) lies in the x-y plane, and any
+    viewing direction v_hat has inclination cos(i) = |v_hat . z_hat|.
+
+    pynbody.analysis.angmom.faceon operates in place on the parent snapshot when
+    called on a SubSnap — all particles (not just the tracer subset) are
+    rotated together.
+
+    Returns:
+        tracer_name: string identifying which tracer was used (for provenance)
+    """
+    tracer, tracer_name = select_orientation_tracer(data)
+    print(f"Applying pynbody.analysis.angmom.faceon using tracer='{tracer_name}'...")
+
+    # faceon rotates the parent snapshot in place. We pass move_all=True
+    # (default) so the full data object — not just the tracer — is rotated.
+    pynbody.analysis.angmom.faceon(tracer)
+
+    print("  Snapshot reoriented: disk angular momentum now aligned with +z.")
+    return tracer_name
+
+
 def extract_star_properties(data):
     """
     Pull out all star particle properties that SKIRT needs,
     converting to physical units.
 
     Returns a dictionary of numpy arrays, each with shape (N,) or (N,3).
-    
+
     Properties extracted:
-        pos     - 3D position in parsecs
-        vel     - 3D velocity in km/s
+        pos     - 3D position in parsecs (in disk-aligned frame)
+        vel     - 3D velocity in km/s (in disk-aligned frame)
         mass    - particle mass in solar masses (used as both initial and current mass;
                   Romulus data does not have a separate 'massform' field)
         metals  - metallicity as a dimensionless mass fraction
@@ -94,13 +242,13 @@ def extract_gas_properties(data):
     """
     Pull out all gas/dust particle properties that SKIRT needs,
     converting to physical units.
-    
+
     SKIRT uses gas particles to model the diffuse dust distribution.
     The dust mass at each particle is computed later from the gas mass
     and metallicity (metals act as a proxy for dust content).
 
     Properties extracted:
-        pos      - 3D position in parsecs
+        pos      - 3D position in parsecs (in disk-aligned frame)
         mass     - particle mass in solar masses
         metals   - metallicity as a dimensionless mass fraction
         smooth   - smoothing length in parsecs
@@ -126,59 +274,18 @@ def extract_gas_properties(data):
     return gas
 
 
-def compute_center_of_mass(stars):
-    """
-    Compute the mass-weighted center of position for the stellar component.
-    
-    This replaces the NIHAO approach of taking the midpoint of the bounding box
-    extremes, which is not physically motivated — an asymmetric galaxy would
-    have its center placed incorrectly.
-    
-    We use stars (not gas) because the stellar distribution better traces
-    the galaxy center, especially in dwarfs where gas can be offset.
-    
-    Returns (x_center, y_center, z_center) in parsecs.
-    """
-    total_mass = np.sum(stars['mass'])
-    x_center = np.sum(stars['x_pos'] * stars['mass']) / total_mass
-    y_center = np.sum(stars['y_pos'] * stars['mass']) / total_mass
-    z_center = np.sum(stars['z_pos'] * stars['mass']) / total_mass
-
-    print(f"Center of mass: ({x_center:.2f}, {y_center:.2f}, {z_center:.2f}) pc")
-
-    return x_center, y_center, z_center
-
-
-def center_particles(stars, gas, center):
-    """
-    Shift all particle positions so the galaxy center is at (0, 0, 0).
-    SKIRT expects the source to be centered at the origin.
-    """
-    x_c, y_c, z_c = center
-
-    stars['x_pos'] -= x_c
-    stars['y_pos'] -= y_c
-    stars['z_pos'] -= z_c
-
-    gas['x_pos'] -= x_c
-    gas['y_pos'] -= y_c
-    gas['z_pos'] -= z_c
-
-    print("Particles centered at origin.")
-
-
 def spatial_cut(stars, gas, radius_pc):
     """
     Remove particles beyond a given radius from the origin.
-    
+
     The Romulus zoom-in data is already focused on one halo, but there
     may be outlier particles at the edges that we don't want to include.
     This replaces the NIHAO approach of using a halo catalogue bounding box
     divided by 6 (an empirical calibration that doesn't apply here).
-    
+
     Uses a spherical cut rather than a box cut — more physically appropriate
     for a galaxy.
-    
+
     Args:
         stars:      dict of star property arrays
         gas:        dict of gas property arrays
@@ -206,15 +313,18 @@ def spatial_cut(stars, gas, radius_pc):
     print(f"  Gas:   {n_gas_before} -> {len(gas['x_pos'])} ({n_gas_before - len(gas['x_pos'])} removed)")
 
 
-def save_particles(stars, gas, output_dir):
+def save_particles(stars, gas, output_dir, tracer_name):
     """
     Save particle data as .npy files that downstream SKIRT scripts expect.
-    
+
     Output format matches NIHAO-SKIRT convention:
         stars.npy — columns: x, y, z, smooth, vx, vy, vz, mass, metals, age
         gas.npy   — columns: x, y, z, smooth, mass, metals, temp
         gas_density.npy — gas density in its own file
         current_mass_stars.npy — stellar mass (same as mass for Romulus)
+
+    Also writes orientation_info.txt recording which tracer was used to
+    align the disk, for provenance.
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -249,11 +359,21 @@ def save_particles(stars, gas, output_dir):
     np.save(os.path.join(output_dir, 'gas_density.npy'), gas_density_array)
     np.save(os.path.join(output_dir, 'current_mass_stars.npy'), current_mass_array)
 
+    # Provenance: record which tracer set the disk orientation
+    with open(os.path.join(output_dir, 'orientation_info.txt'), 'w') as f:
+        f.write(f"orientation_tracer: {tracer_name}\n")
+        f.write(f"tracer_radius_kpc: {TRACER_RADIUS_KPC}\n")
+        f.write(f"cold_gas_temp_k:   {COLD_GAS_TEMP_K}\n")
+        f.write(f"young_star_age_yr: {YOUNG_STAR_AGE_YR}\n")
+        f.write(f"convention: disk angular momentum L_hat aligned with +z_hat\n")
+        f.write(f"inclination formula: cos(i) = |v_hat . z_hat|\n")
+
     print(f"\nSaved to {output_dir}:")
-    print(f"  stars.npy            — {star_array.shape}")
-    print(f"  gas.npy              — {gas_array.shape}")
-    print(f"  gas_density.npy      — {gas_density_array.shape}")
+    print(f"  stars.npy              — {star_array.shape}")
+    print(f"  gas.npy                — {gas_array.shape}")
+    print(f"  gas_density.npy        — {gas_density_array.shape}")
     print(f"  current_mass_stars.npy — {current_mass_array.shape}")
+    print(f"  orientation_info.txt   — tracer={tracer_name}")
 
 
 # ============================================================================
@@ -270,25 +390,35 @@ if __name__ == '__main__':
                         help="Directory to save output .npy files")
     parser.add_argument("--radius", type=float, default=None,
                         help="Spatial cut radius in parsecs (optional; if not given, no cut is applied)")
+    parser.add_argument("--skip-orient", action='store_true',
+                        help="Skip orientation correction (for debugging only; "
+                             "downstream inclination angles will be meaningless)")
     args = parser.parse_args()
 
     # Step 1: Load the simulation snapshot
     data = load_snapshot(args.snapshot)
 
-    # Step 2: Extract and convert units
+    # Step 2: Center the pynbody snapshot (needed before faceon)
+    center_snapshot(data)
+
+    # Step 3: Orient the disk face-on (L_hat -> +z_hat)
+    if args.skip_orient:
+        warnings.warn("Skipping orientation correction. Downstream inclination "
+                      "angles will NOT be physically meaningful.", RuntimeWarning)
+        tracer_name = 'SKIPPED'
+    else:
+        tracer_name = orient_faceon(data)
+
+    # Step 4: Extract and convert units (positions now in disk-aligned frame)
     stars = extract_star_properties(data)
     gas = extract_gas_properties(data)
 
-    # Step 3: Center the galaxy at the origin using center of mass
-    center = compute_center_of_mass(stars)
-    center_particles(stars, gas, center)
-
-    # Step 4: Spatial cut (optional)
+    # Step 5: Spatial cut (optional)
     if args.radius is not None:
         spatial_cut(stars, gas, args.radius)
 
-    # Step 5: Save
-    save_particles(stars, gas, args.output)
+    # Step 6: Save
+    save_particles(stars, gas, args.output, tracer_name)
 
     end = timer()
     print(f"\nDone in {end - start:.1f} seconds.")
