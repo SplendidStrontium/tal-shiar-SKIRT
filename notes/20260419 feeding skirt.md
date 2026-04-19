@@ -23,3 +23,9 @@ Also an issue with ISM and temperature cutoff. Was using the 8K threshold used i
 
 ## doing a dry-run to diagnose
 > python run_skirt_production.py --dry-run
+
+## run SKIRT
+> python run_skirt_production.py
+
+or, if you want to close your terminal:
+> python run_skirt_production.py --detach
