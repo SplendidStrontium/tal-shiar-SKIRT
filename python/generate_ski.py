@@ -44,7 +44,7 @@ MAX_LEVEL = 8
 
 # Dust
 DUST_FRACTION = 0.4         # NIHAO mainstream
-MAX_DUST_TEMP_K = 8000      # Camps+ convention
+MAX_DUST_TEMP_K = 30000      # adjusted for Romulus
 NUM_SILICATE_SIZES = 15
 NUM_HYDROCARBON_SIZES = 15
 
@@ -145,13 +145,15 @@ def medium_system_with_dust():
 
 def medium_system_nodust():
     """
-    No medium at all. SKIRT SourceSystem + no MediumSystem means stellar
-    emission propagates unimpeded. F_nodust is the intrinsic stellar SED.
+    Return empty string — no <mediumSystem> element at all.
+
+    SKIRT v9 treats an empty <MediumSystem></MediumSystem> element as an
+    error (it tries to instantiate default geometry requiring scaleLength).
+    To run truly medium-free, the mediumSystem element must be absent from
+    the ski entirely. F_nodust is then the intrinsic stellar SED with no
+    radiative transfer.
     """
-    return '''    <mediumSystem type="MediumSystem">
-      <MediumSystem>
-      </MediumSystem>
-    </mediumSystem>'''
+    return ""
 
 
 def probe_system(with_dust):
@@ -184,12 +186,13 @@ def probe_system(with_dust):
 def build_ski(with_dust, num_photons=NUM_PHOTONS_PRODUCTION):
     label = "dust" if with_dust else "no-dust"
     medium = medium_system_with_dust() if with_dust else medium_system_nodust()
+    mode = "ExtinctionOnly" if with_dust else "NoMedium"
     probes = probe_system(with_dust)
 
     return f'''<?xml version='1.0' encoding='UTF-8'?>
 <!-- Tal Shiar SKIRT: r142, {label}, ExtinctionOnly, UV-NIR, 12 inclinations -->
 <skirt-simulation-hierarchy type="MonteCarloSimulation" format="9" producer="Tal Shiar pipeline">
-  <MonteCarloSimulation userLevel="Regular" simulationMode="ExtinctionOnly" numPackets="{num_photons}">
+  <MonteCarloSimulation userLevel="Regular" simulationMode="{mode}" numPackets="{num_photons}">
     <random type="Random">
       <Random seed="0"/>
     </random>

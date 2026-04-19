@@ -29,16 +29,14 @@ Orientation correction (new in this version):
            spheroidal and inclination interpretation is suspect)
 
 What this script does NOT do (yet):
-    - ageSmooth: a technique that splits each star particle into ~50 sub-particles
-      with slightly different ages, to smooth out bursty star formation histories.
-      The original NIHAO pipeline has this as an optional step. If needed later,
-      refer to the ageSmooth() method in the original NIHAO makeParticles.py.
-    - youngStars: separates stars younger than 10 Myr and assigns them
-      MAPPINGS-III HII region SEDs instead of simple stellar SEDs, to model
-      the fact that young stars are still embedded in birth clouds. Also creates
-      "ghost" dust particles with negative mass to carve holes in the diffuse dust.
-      If needed later, refer to the youngStars() method in the original NIHAO
-      makeParticles.py.
+        - ageSmooth: a technique that splits each star particle into ~50 sub-particles
+          with slightly different ages, to smooth out bursty star formation histories.
+          The original NIHAO pipeline has this as an optional step. If needed later,
+          refer to the ageSmooth() method in the original NIHAO makeParticles.py.
+        - Ghost dust particles with negative mass to carve holes in the diffuse dust
+          around young stars (NIHAO technique from Camps+2016). The MAPPINGS SED
+          already models the HII region + birth cloud, so this is a second-order
+          correction for future work.
 
 Adapted from NIHAO-SKIRT-Pipeline/bin/makeParticles.py
 Key differences from NIHAO version:
@@ -72,6 +70,27 @@ YOUNG_STAR_AGE_YR = 1e9
 TRACER_RADIUS_KPC = 10.0
 MIN_COLD_GAS_MASS = 1e8
 MIN_YOUNG_STAR_MASS = 1e7
+
+
+# ---------------------------------------------------------------------------
+# Young stellar particle split for MAPPINGS SED
+# ---------------------------------------------------------------------------
+# Particles younger than this are written to youngStars.txt with MAPPINGS HII
+# region SEDs; older particles get simple FSPS stellar SEDs in stars.txt.
+# Groves+2008 sets the birth cloud clearing timescale at ~10 Myr.
+YOUNG_STAR_CUTOFF_YR = 1e7
+
+# HII region parameters for MAPPINGS (literature defaults, mentor-review-pending).
+# These are not simulation outputs; they are assumed values for all young
+# particles. Sources:
+#   logC = 5:         Groves+2008, middle-of-range compactness
+#   p_ism = 1.38e5:   Jonsson+2010, Groves+2008 fiducial ISM pressure (Pa)
+#   f_PDR = 0.2:      Jonsson+2010 PDR covering fraction
+# These values affect UV/optical flux from young regions and could plausibly
+# shift attenuation curves by several percent at short wavelengths.
+MAPPINGS_LOGC = 5.0
+MAPPINGS_PRESSURE_PA = 1.38e5
+MAPPINGS_F_PDR = 0.2
 
 
 def load_snapshot(filepath):
@@ -374,6 +393,152 @@ def save_particles(stars, gas, output_dir, tracer_name):
     print(f"  current_mass_stars.npy — {current_mass_array.shape}")
     print(f"  orientation_info.txt   — tracer={tracer_name}")
 
+def write_skirt_text_files(stars, gas, output_dir):
+    """
+    Write stars.txt, youngStars.txt, and gas.txt for SKIRT's ParticleSource
+    and ParticleMedium to read directly.
+
+    Splits stars by age:
+        - age <  YOUNG_STAR_CUTOFF_YR  -> youngStars.txt (MAPPINGS schema)
+        - age >= YOUNG_STAR_CUTOFF_YR  -> stars.txt       (FSPS schema)
+
+    Column conventions (must match what the .ski file declares):
+
+    stars.txt (FSPS, 10 columns):
+        x y z h vx vy vz M Z age
+        [pc pc pc pc km/s km/s km/s Msol 1 yr]
+
+    youngStars.txt (MAPPINGS, 12 columns):
+        x y z h vx vy vz SFR Z logC p f_PDR
+        [pc pc pc pc km/s km/s km/s Msol/yr 1 1 Pa 1]
+
+    gas.txt (THEMIS medium, 9 columns — matches NIHAO customWLG.ski):
+        x y z h M Z T vx vy
+        [pc pc pc pc Msol 1 K km/s km/s]
+        (velocity not imported in our .ski, but columns must be present
+         for SKIRT to parse correctly if importVelocity is ever flipped on)
+
+    NOTE on SFR for young particles:
+        MAPPINGS wants initial mass / 10 Myr. Romulus does not record
+        formation mass, so we use current mass as a proxy. For particles
+        <10 Myr old, mass loss is <5%, so this is a defensible approximation.
+
+    NOTE on zero-young-particle case:
+        If no particles satisfy age < cutoff, youngStars.txt is written with
+        only a header (no data rows). SKIRT's MAPPINGS ParticleSource will
+        emit zero flux, which is the scientifically correct behavior for a
+        quiescent galaxy.
+    """
+    young_mask = stars['age'] < YOUNG_STAR_CUTOFF_YR
+    old_mask = ~young_mask
+
+    n_young = int(young_mask.sum())
+    n_old = int(old_mask.sum())
+
+    # --- Sanity check: expected young count from SFR_100Myr ---
+    # A rough check that `age` is in yr, not Gyr. If `age` were secretly in Gyr,
+    # nearly every particle would pass age<1e7 (since ages in Gyr are << 1e7).
+    # Flag that pathology loudly.
+    if n_young > 0.5 * len(stars['age']):
+        warnings.warn(
+            f"{n_young}/{len(stars['age'])} stars classified as young (<{YOUNG_STAR_CUTOFF_YR:.0e} yr). "
+            f"This is suspiciously high — check whether `age` is in yr (expected) or Gyr (bug). "
+            f"Median age: {np.median(stars['age']):.3e}",
+            RuntimeWarning,
+        )
+
+    # --- Write stars.txt (old stars, FSPS) ---
+    stars_txt_path = os.path.join(output_dir, 'stars.txt')
+    header_stars = (
+        "Column 1: x (pc)\n"
+        "Column 2: y (pc)\n"
+        "Column 3: z (pc)\n"
+        "Column 4: smoothing length (pc)\n"
+        "Column 5: vx (km/s)\n"
+        "Column 6: vy (km/s)\n"
+        "Column 7: vz (km/s)\n"
+        "Column 8: mass (Msun)\n"       # was Msol
+        "Column 9: metallicity (1)\n"
+        "Column 10: age (yr)"
+    )
+    stars_old = np.c_[
+        stars['x_pos'][old_mask], stars['y_pos'][old_mask], stars['z_pos'][old_mask],
+        stars['smooth'][old_mask],
+        stars['x_vel'][old_mask], stars['y_vel'][old_mask], stars['z_vel'][old_mask],
+        stars['mass'][old_mask],
+        stars['metals'][old_mask],
+        stars['age'][old_mask],
+    ]
+    np.savetxt(stars_txt_path, stars_old, header=header_stars, fmt='%.6e')
+
+    # --- Write youngStars.txt (young stars, MAPPINGS) ---
+    young_stars_txt_path = os.path.join(output_dir, 'youngStars.txt')
+    header_young = (
+        "Column 1: x (pc)\n"
+        "Column 2: y (pc)\n"
+        "Column 3: z (pc)\n"
+        "Column 4: smoothing length (pc)\n"
+        "Column 5: vx (km/s)\n"
+        "Column 6: vy (km/s)\n"
+        "Column 7: vz (km/s)\n"
+        "Column 8: SFR (Msun/yr)\n"            # was Msol/yr
+        "Column 9: metallicity (1)\n"
+        "Column 10: logC (1)\n"
+        "Column 11: ISM pressure (Pa)\n"
+        "Column 12: PDR covering fraction (1)"
+    )
+    if n_young > 0:
+        sfr = stars['mass'][young_mask] / YOUNG_STAR_CUTOFF_YR  # Msol/yr
+        logC = np.full(n_young, MAPPINGS_LOGC, dtype=np.float32)
+        p_ism = np.full(n_young, MAPPINGS_PRESSURE_PA, dtype=np.float32)
+        f_pdr = np.full(n_young, MAPPINGS_F_PDR, dtype=np.float32)
+        young_data = np.c_[
+            stars['x_pos'][young_mask], stars['y_pos'][young_mask], stars['z_pos'][young_mask],
+            stars['smooth'][young_mask],
+            stars['x_vel'][young_mask], stars['y_vel'][young_mask], stars['z_vel'][young_mask],
+            sfr, stars['metals'][young_mask],
+            logC, p_ism, f_pdr,
+        ]
+        np.savetxt(young_stars_txt_path, young_data, header=header_young, fmt='%.6e')
+    else:
+        # Empty file with header only — SKIRT reads this and emits zero flux
+        with open(young_stars_txt_path, 'w') as f:
+            for line in header_young.split('\n'):
+                f.write(f'# {line}\n')
+
+    # --- Write gas.txt (THEMIS medium) ---
+    gas_txt_path = os.path.join(output_dir, 'gas.txt')
+    header_gas = (
+        "Column 1: x (pc)\n"
+        "Column 2: y (pc)\n"
+        "Column 3: z (pc)\n"
+        "Column 4: smoothing length (pc)\n"
+        "Column 5: mass (Msun)\n"           # was Msol
+        "Column 6: metallicity (1)\n"
+        "Column 7: temperature (K)"
+    )
+    gas_data = np.c_[
+        gas['x_pos'], gas['y_pos'], gas['z_pos'],
+        gas['smooth'],
+        gas['mass'], gas['metals'], gas['temp'],
+    ]
+    np.savetxt(gas_txt_path, gas_data, header=header_gas, fmt='%.6e')
+
+    # --- Diagnostic output ---
+    print(f"\nWrote SKIRT text files to {output_dir}:")
+    print(f"  stars.txt       — {n_old} particles (FSPS), "
+          f"M_tot = {stars['mass'][old_mask].sum():.2e} Msol")
+    if n_young > 0:
+        print(f"  youngStars.txt  — {n_young} particles (MAPPINGS), "
+              f"ΣSFR = {(stars['mass'][young_mask] / YOUNG_STAR_CUTOFF_YR).sum():.3f} Msol/yr, "
+              f"Z_range = [{stars['metals'][young_mask].min():.4f}, {stars['metals'][young_mask].max():.4f}]")
+        print(f"                    logC={MAPPINGS_LOGC}, p={MAPPINGS_PRESSURE_PA:.2e} Pa, "
+              f"f_PDR={MAPPINGS_F_PDR} (literature defaults, mentor-review-pending)")
+    else:
+        print(f"  youngStars.txt  — 0 particles (galaxy is quiescent over <{YOUNG_STAR_CUTOFF_YR:.0e} yr)")
+    print(f"  gas.txt         — {len(gas['x_pos'])} particles, "
+          f"M_tot = {gas['mass'].sum():.2e} Msol")
+
 
 # ============================================================================
 # Main
@@ -418,6 +583,9 @@ if __name__ == '__main__':
 
     # Step 6: Save
     save_particles(stars, gas, args.output, tracer_name)
+
+    # Step 7: Write .txt files for SKIRT to ingest directly
+    write_skirt_text_files(stars, gas, args.output)
 
     end = timer()
     print(f"\nDone in {end - start:.1f} seconds.")
