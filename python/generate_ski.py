@@ -40,7 +40,7 @@ NUM_WAVELENGTHS = 80        # log-spaced SED resolution
 
 # Grid refinement
 MIN_LEVEL = 6
-MAX_LEVEL = 8
+MAX_LEVEL = 9       # was 8; increased to reduce noise
 
 # Dust
 DUST_FRACTION = 0.4         # NIHAO mainstream

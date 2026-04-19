@@ -20,3 +20,6 @@ This is also a diversion from the NIHAO setup; In NIHAO, the no-dust run was wit
 Also worth noting is that SKIRT reads units in text files and expects Msun, not Msol.
 
 Also an issue with ISM and temperature cutoff. Was using the 8K threshold used in NIHAO; this is totally inappropriate for Romulus. Need a higher temperature, otherwise there just isn't enough dust to get any meaningful result. 
+
+## doing a dry-run to diagnose
+> python run_skirt_production.py --dry-run
