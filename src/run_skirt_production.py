@@ -37,6 +37,11 @@ from pathlib import Path
 from time import perf_counter
 from datetime import datetime
 
+# ---------------------------------------------------------------------------
+# Galaxy selection — change this for r107 / r320
+# ---------------------------------------------------------------------------
+GALAXY_ID = "r320"
+
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
 
 
@@ -128,7 +133,7 @@ def run_skirt(skirt_bin, ski_path, workdir, label):
 
 def main():
     parser = argparse.ArgumentParser(description="Production SKIRT driver for Tal Shiar pipeline")
-    parser.add_argument("--particle-dir", default="/mnt/data0/pkrsnak/romulus/r142",
+    parser.add_argument("--particle-dir", default=f"/mnt/data0/pkrsnak/romulus/{GALAXY_ID}",
                         help="Directory containing stars.txt, youngStars.txt, gas.txt")
     parser.add_argument("--ski-dir", default=None,
                         help="Directory containing production ski files "
@@ -155,7 +160,7 @@ def main():
         ]
         ski_dir = None
         for cand in candidates:
-            if (cand / "r142_dust.ski").exists():
+            if (cand / f"{GALAXY_ID}_dust.ski").exists():
                 ski_dir = cand
                 break
         if ski_dir is None:
@@ -171,7 +176,7 @@ def main():
     output_dir.mkdir(exist_ok=True)
 
     required_particles = ["stars.txt", "youngStars.txt", "gas.txt"]
-    ski_files = ["r142_dust.ski", "r142_nodust.ski"]
+    ski_files = [f"{GALAXY_ID}_dust.ski", f"{GALAXY_ID}_nodust.ski"]
 
     # --- nohup detach mode: re-exec ourselves under nohup ---
     if args.detach:
@@ -217,9 +222,9 @@ def main():
     # Which runs to execute
     runs = []
     if not args.skip_dust:
-        runs.append(("dust", ski_dir / "r142_dust.ski"))
+        runs.append(("dust", ski_dir / f"{GALAXY_ID}_dust.ski"))
     if not args.skip_nodust:
-        runs.append(("nodust", ski_dir / "r142_nodust.ski"))
+        runs.append(("nodust", ski_dir / f"{GALAXY_ID}_nodust.ski"))
 
     if not runs:
         log("Nothing to do (both --skip-dust and --skip-nodust set).")
@@ -262,7 +267,7 @@ def main():
     log(f"  {'TOTAL':8s}: {total_dt:7.1f}s ({total_dt/60:5.1f} min, {total_dt/3600:.2f} hr)")
 
     # Output inventory
-    outputs = sorted(output_dir.glob("r142_*"))
+    outputs = sorted(output_dir.glob(f"{GALAXY_ID}_*"))
     log(f"")
     log(f"Output files in {output_dir}: {len(outputs)} total")
     type_counts = {}

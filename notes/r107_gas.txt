@@ -1,0 +1,23 @@
+Loading /mnt/data0/pkrsnak/romulus/r107/gas.npy
+
+=== r107 gas summary ===
+Total gas particles:             17290, M = 3.443e+09 Msun
+  in 35 kpc box:                 17290, M = 3.443e+09 Msun
+  cold (T<3e+04):                12422, M = 2.496e+09 Msun
+  cold AND in box:               12422, M = 2.496e+09 Msun
+
+Temperature distribution:
+  T < 1e+03:         0 particles, M = 0.000e+00 Msun (0.0%)
+  T < 3e+03:         1 particles, M = 2.138e+05 Msun (0.0%)
+  T < 8e+03:       835 particles, M = 1.730e+08 Msun (5.0%)
+  T < 3e+04:     12422 particles, M = 2.496e+09 Msun (72.5%)
+  T < 1e+05:     12569 particles, M = 2.525e+09 Msun (73.3%)
+  T < 1e+06:     16805 particles, M = 3.351e+09 Msun (97.3%)
+
+Expected dust mass (dustFraction=0.4 x cold in-box metals): 8.576e+06 Msun
+
+Z-extent of cold in-box gas:
+  |z|_min: 0.9 pc
+  |z|_max: 18681.6 pc
+  |z|_50%: 3663.3 pc (half-thickness)
+  |z|_90%: 7569.9 pc

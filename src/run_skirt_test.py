@@ -44,6 +44,11 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
+# ---------------------------------------------------------------------------
+# Galaxy selection — change this for r107 / r320
+# ---------------------------------------------------------------------------
+GALAXY_ID = "r107"
+
 # Default SKIRT binary — override with --skirt if needed
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
 
@@ -166,10 +171,10 @@ def run_skirt(skirt_bin, ski_path, workdir):
 
 def main():
     parser = argparse.ArgumentParser(description="SKIRT test-run driver for Tal Shiar pipeline")
-    parser.add_argument("--particle-dir", default="/mnt/data0/pkrsnak/romulus/r142",
+    parser.add_argument("--particle-dir", default=f"/mnt/data0/pkrsnak/romulus/{GALAXY_ID}",
                         help="Directory containing stars.txt, youngStars.txt, gas.txt")
     parser.add_argument("--ski-dir", default=".",
-                        help="Directory containing r142_dust.ski and r142_nodust.ski")
+                        help=f"Directory containing {GALAXY_ID}_dust.ski and {GALAXY_ID}_nodust.ski")
     parser.add_argument("--test-subdir", default="test_runs",
                         help="Subdirectory of --particle-dir for test outputs")
     parser.add_argument("--photons", default="1e6",
@@ -205,8 +210,8 @@ def main():
         print(f"  {f}: {size_mb:.2f} MB, {nlines} lines")
 
     # --- Preflight: confirm ski files exist ---
-    dust_src = ski_dir / "r142_dust.ski"
-    nodust_src = ski_dir / "r142_nodust.ski"
+    dust_src = ski_dir / f"{GALAXY_ID}_dust.ski"
+    nodust_src = ski_dir / f"{GALAXY_ID}_nodust.ski"
     if not dust_src.exists():
         print(f"ERROR: {dust_src} not found")
         sys.exit(1)
@@ -234,16 +239,16 @@ def main():
             link.unlink()
         link.symlink_to(particle_dir / f)
 
-    dust_test = test_dir / "r142_dust_test.ski"
-    nodust_test = test_dir / "r142_nodust_test.ski"
+    dust_test = test_dir / f"{GALAXY_ID}_dust_test.ski"
+    nodust_test = test_dir / f"{GALAXY_ID}_nodust_test.ski"
 
     print("\nRewriting ski files for test...")
     n_dust = rewrite_ski_for_test(dust_src, dust_test,
                                    args.photons, args.pixels, args.inclinations)
     n_nodust = rewrite_ski_for_test(nodust_src, nodust_test,
                                      args.photons, args.pixels, args.inclinations)
-    print(f"  r142_dust_test.ski:   {n_dust} instruments")
-    print(f"  r142_nodust_test.ski: {n_nodust} instruments")
+    print(f"  {dust_test.name}:   {n_dust} instruments")
+    print(f"  {nodust_test.name}: {n_nodust} instruments")
 
     # --- Emulation pass ---
     print("\nEmulation pass (schema validation)...")
@@ -294,7 +299,7 @@ def main():
 
     # --- List output files ---
     print(f"\nOutput files in {test_dir}:")
-    outputs = sorted(test_dir.glob("r142_*"))
+    outputs = sorted(test_dir.glob(f"{GALAXY_ID}_*"))
     for p in outputs[:20]:
         size = p.stat().st_size
         size_str = f"{size/1e6:.1f} MB" if size > 1e6 else f"{size/1e3:.1f} KB"

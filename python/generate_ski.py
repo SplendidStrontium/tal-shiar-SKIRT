@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Generate Tal Shiar SKIRT ski files for r142.
+Generate Tal Shiar SKIRT ski files for a Romulus galaxy (set GALAXY_ID below).
 
 Produces two files:
-  r142_dust.ski   — ExtinctionOnly with THEMIS dust medium
-  r142_nodust.ski — ExtinctionOnly with no medium (stellar-only baseline)
+  {GALAXY_ID}_dust.ski   — ExtinctionOnly with THEMIS dust medium
+  {GALAXY_ID}_nodust.ski — ExtinctionOnly with no medium (stellar-only baseline)
 
 Both share identical sources, instruments, wavelength grid, and inclinations
 so that F_dust / F_nodust is a clean per-orientation, per-wavelength ratio.
@@ -19,6 +19,11 @@ Usage:
 
 import numpy as np
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# Galaxy selection — change this for r107 / r320
+# ---------------------------------------------------------------------------
+GALAXY_ID = "r320"
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -111,7 +116,9 @@ def sources_block():
 def medium_system_with_dust():
     """
     THEMIS dust medium from gas.txt. dustFraction=0.4 applied via massFraction.
-    maxTemperature=8000 K kills the hot ISM (Camps+ convention).
+    maxTemperature={MAX_DUST_TEMP_K} K kills the hot ISM. Note this is
+    raised vs the Camps+ 8000 K convention because Romulus's BH feedback
+    leaves more of the ISM in a warm phase than NIHAO galaxies.
 
     NOTE: We keep PhotonPacketOptions but drop DustEmissionOptions and
     RadiationFieldOptions entirely — ExtinctionOnly mode doesn't use them.
@@ -190,7 +197,7 @@ def build_ski(with_dust, num_photons=NUM_PHOTONS_PRODUCTION):
     probes = probe_system(with_dust)
 
     return f'''<?xml version='1.0' encoding='UTF-8'?>
-<!-- Tal Shiar SKIRT: r142, {label}, ExtinctionOnly, UV-NIR, 12 inclinations -->
+<!-- Tal Shiar SKIRT: {GALAXY_ID}, {label}, ExtinctionOnly, UV-NIR, 12 inclinations -->
 <skirt-simulation-hierarchy type="MonteCarloSimulation" format="9" producer="Tal Shiar pipeline">
   <MonteCarloSimulation userLevel="Regular" simulationMode="{mode}" numPackets="{num_photons}">
     <random type="Random">
@@ -234,11 +241,13 @@ if __name__ == "__main__":
     dust_ski = build_ski(with_dust=True)
     nodust_ski = build_ski(with_dust=False)
 
-    (outdir / "r142_dust.ski").write_text(dust_ski)
-    (outdir / "r142_nodust.ski").write_text(nodust_ski)
+    dust_path = outdir / f"{GALAXY_ID}_dust.ski"
+    nodust_path = outdir / f"{GALAXY_ID}_nodust.ski"
+    dust_path.write_text(dust_ski)
+    nodust_path.write_text(nodust_ski)
 
-    print(f"Wrote r142_dust.ski   ({len(dust_ski):,} bytes)")
-    print(f"Wrote r142_nodust.ski ({len(nodust_ski):,} bytes)")
+    print(f"Wrote {dust_path.name}   ({len(dust_ski):,} bytes)")
+    print(f"Wrote {nodust_path.name} ({len(nodust_ski):,} bytes)")
     print()
     print("Inclinations (deg):")
     for i, inc in enumerate(inclinations_deg()):
