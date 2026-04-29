@@ -27,3 +27,18 @@ Let's try r107.
 These could take longer. Plan for it.
 
 > python run_skirt_production.py --detach
+
+Check the progress while it runs with:
+
+> tail -f /mnt/data0/pkrsnak/romulus/r320/production/production.log
+
+## plot_attenuation.py
+Changes made to parameterize the input; must be coded on line 48 prior to run.
+
+## compare_galaxies.py
+Compare attenuation of three galaxies
+
+> python compare_galaxies.py --output-dir .
+
+## make_money_shots.py
+Some tuning with colors; chose a redder band (like Hubble) where reddish dust is emphasized in RGB.

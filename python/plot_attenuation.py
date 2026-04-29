@@ -42,6 +42,10 @@ matplotlib.use("Agg")  # headless — no X needed on Hamilton
 import matplotlib.pyplot as plt
 from matplotlib.cm import viridis
 
+# ---------------------------------------------------------------------------
+# Galaxy selection — change this for r107 / r320
+# ---------------------------------------------------------------------------
+GALAXY_ID = "r142"
 
 # --- File pattern matching ---
 
@@ -80,7 +84,7 @@ def collect_seds(input_dir, variant):
     Returns a dict: {inc_idx: (inc_deg, wavelength, flux)}
     Sorted by inclination index.
     """
-    pattern = f"r142_{variant}_i*_sed.dat"
+    pattern = f"{GALAXY_ID}_{variant}_i*_sed.dat"
     paths = sorted(input_dir.glob(pattern))
     if not paths:
         # Fall back to pattern without r142 prefix, in case naming changes
@@ -132,7 +136,7 @@ def plot_attenuation_curves(inclinations_deg, wavelengths, A_matrix, out_path):
     ax.set_xscale("log")
     ax.set_xlabel(r"Wavelength $\lambda$ ($\mu$m)")
     ax.set_ylabel(r"Attenuation $A(\lambda)$ (mag)")
-    ax.set_title("r142 — Attenuation curves by inclination")
+    ax.set_title(f"{GALAXY_ID} — Attenuation curves by inclination")
     ax.axhline(0, color="gray", lw=0.5, ls=":")
     ax.grid(True, which="both", alpha=0.25)
     ax.legend(title="Inclination", loc="upper right", fontsize=8,
@@ -198,7 +202,7 @@ def plot_av_vs_cos_i(inclinations_deg, wavelengths, A_matrix, out_path,
 
     ax.set_xlabel(r"$\cos\,i$ (1 = face-on, 0 = edge-on)")
     ax.set_ylabel(r"Attenuation $A(\lambda, i)$ (mag)")
-    ax.set_title("r142 — Attenuation vs orientation")
+    ax.set_title(f"{GALAXY_ID} — Attenuation vs orientation")
 
     # NIHAO / Trcka / Trayford convention: face-on on left, edge-on on right
     # so attenuation curves rise left-to-right. Achieve by putting cos_i=1
@@ -272,7 +276,7 @@ def save_attenuation_table(inclinations_deg, wavelengths, A_matrix, out_path):
 def main():
     parser = argparse.ArgumentParser(description="Plot A(lambda, i) from SKIRT output")
     parser.add_argument("--input-dir",
-                        default="/mnt/data0/pkrsnak/romulus/r142/production",
+                        default=f"/mnt/data0/pkrsnak/romulus/{GALAXY_ID}/production",
                         help="Directory containing SKIRT _sed.dat files")
     parser.add_argument("--output-dir", default=None,
                         help="Where to save plots (default: --input-dir)")
@@ -338,13 +342,13 @@ def main():
     print()
     print("Plotting...")
     plot_attenuation_curves(inclinations_deg, wl_ref, A_matrix,
-                            output_dir / "r142_attenuation_curves.png")
+                            output_dir / f"{GALAXY_ID}_attenuation_curves.png")
     plot_av_vs_cos_i(inclinations_deg, wl_ref, A_matrix,
-                     output_dir / "r142_av_vs_cos_i.png")
+                     output_dir / f"{GALAXY_ID}_av_vs_cos_i.png")
 
     # Save numerical table for downstream use
     save_attenuation_table(inclinations_deg, wl_ref, A_matrix,
-                           output_dir / "r142_attenuation_table.dat")
+                           output_dir / f"{GALAXY_ID}_attenuation_table.dat")
 
     print()
     print("Done.")

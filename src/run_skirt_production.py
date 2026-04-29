@@ -40,7 +40,7 @@ from datetime import datetime
 # ---------------------------------------------------------------------------
 # Galaxy selection — change this for r107 / r320
 # ---------------------------------------------------------------------------
-GALAXY_ID = "r320"
+GALAXY_ID = "r107"
 
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
 
