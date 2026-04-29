@@ -21,3 +21,5 @@ Initial run of project aims to study effect of dust and orientation on light att
 5. inspect_gas_temp.py       // inspect npy array for gas characteristics
 6. generate_ski.py           // create XML file for SKIRT based on input parameters
 7. plot_attenuation          // interpret SKIRT files
+8. compare_galaxies          // compare galaxy attenuation curves
+9. make_money_shots          // assign colors to SKIRT-assigned bands
