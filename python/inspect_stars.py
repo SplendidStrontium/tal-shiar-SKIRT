@@ -4,8 +4,18 @@ For each field makeParticles.py needs, check if it exists and what it looks like
 """
 import pynbody
 import numpy as np
+import warnings
+warnings.simplefilter('error', RuntimeWarning)
 
-data = pynbody.load('/mnt/data0/pkrsnak/romulus/r107.007779.tipsy')
+import os
+
+data = pynbody.load('/mnt/data0/pkrsnak/romulus/r219.007779.tipsy')
+
+print('gas', len(data.gas), 'dm', len(data.dm), 'star', len(data.star))
+print('filesize', os.path.getsize('/mnt/data0/pkrsnak/romulus/r219.007779.tipsy'))
+pos = data.star['pos']
+print('NaN:', np.isnan(pos).sum(), ' inf:', np.isinf(pos).sum(), ' dtype:', pos.dtype)
+print('bad rows:', np.where(~np.isfinite(pos).all(axis=1))[0][:10])
 
 print(f"Total star particles: {len(data.star)}")
 
