@@ -130,6 +130,7 @@ def compute_quantities(data, aperture_kpc, sfr_window_yr, he_fraction):
     g_pos = np.asarray(data.gas['pos'].in_units('kpc'))
     s_r = np.sqrt((s_pos ** 2).sum(axis=1))
     g_r = np.sqrt((g_pos ** 2).sum(axis=1))
+    # eliminate particles outside the aperture
     s_in = s_r < aperture_kpc
     g_in = g_r < aperture_kpc
 
@@ -140,13 +141,21 @@ def compute_quantities(data, aperture_kpc, sfr_window_yr, he_fraction):
     # --- SFR over the chosen window (current mass as massform proxy) ---
     age_yr = np.asarray(data.star['age'].in_units('yr'))
     young = s_in & (age_yr < sfr_window_yr)
+    # SFR = total mass formed in the window / window duration
+    # note this is 25Myr prior to the snapshot time
+    # also using current mass, not massform since snapshot lacks this field
     SFR = float(s_mass[young].sum()) / sfr_window_yr
 
     # --- HI (atomic neutral hydrogen) ---
     g_mass = np.asarray(data.gas['mass'].in_units('Msol'))
     Z = np.asarray(data.gas['metals'], dtype=float)
-    X_H = np.clip(1.0 - he_fraction - Z, 0.0, 1.0)   # hydrogen mass fraction
+    # to find the hydrogen mass fraction, subtract helium and metals
+    # helium is assumed to be a constant mass fraction
+    # metals are per-particle and can vary; they are already in mass fraction units
+    X_H = np.clip(1.0 - he_fraction - Z, 0.0, 1.0)  
+    # use pynbody's ionization equilibrium calculation when available, with a temperature-based fallback
     f_HI, hi_method = neutral_fraction(data.gas)
+    # start with mass of each gas particle, multiply by its hydrogen mass fraction and neutral fraction, then sum over particles in the aperture
     MHI = float((g_mass[g_in] * X_H[g_in] * f_HI[g_in]).sum())
 
     return {
