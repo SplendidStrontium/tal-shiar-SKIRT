@@ -103,8 +103,18 @@ def load_snapshot(filepath):
     print(f"Loading snapshot: {filepath}")
     data = pynbody.load(filepath)
     data.physical_units()
+
+    # print some basic info
     print(f"  Star particles: {len(data.star)}")
     print(f"  Gas particles:  {len(data.gas)}")
+
+    # flag BH candidates
+    tform = data.star['tform']
+    bh = tform < 0
+    print(f"{bh.sum()} BH candidates")
+    print("masses (Msol):", data.star['mass'].in_units('Msol')[bh])
+    print("radii (kpc):", np.sqrt((data.star['pos'].in_units('kpc')[bh]**2).sum(axis=1)))
+
     return data
 
 
@@ -237,17 +247,25 @@ def extract_star_properties(data):
     """
     print("Extracting star properties...")
 
+    # Romulus (GASOLINE/ChaNGa) stores BHs in the star family with tform < 0.
+    # They are not stellar populations: exclude before SED assignment / mass counting.
+    is_star = np.asarray(data.star['tform']) >= 0
+    n_bh = int((~is_star).sum())
+    if n_bh > 0:
+        bh_mass = float(data.star['mass'].in_units('Msol')[~is_star].sum())
+        print(f"  Excluding {n_bh} BH particle(s), M_BH_tot = {bh_mass:.2e} Msol")
+
     stars = {
-        'x_pos':  np.float32(data.star['pos'].in_units('pc')[:, 0]),
-        'y_pos':  np.float32(data.star['pos'].in_units('pc')[:, 1]),
-        'z_pos':  np.float32(data.star['pos'].in_units('pc')[:, 2]),
-        'x_vel':  np.float32(data.star['vel'].in_units('km s**-1')[:, 0]),
-        'y_vel':  np.float32(data.star['vel'].in_units('km s**-1')[:, 1]),
-        'z_vel':  np.float32(data.star['vel'].in_units('km s**-1')[:, 2]),
-        'mass':   np.float32(data.star['mass'].in_units('Msol')),
-        'metals': np.float32(data.star['metals']),
-        'age':    np.float32(data.star['age'].in_units('yr')),
-        'smooth': 2 * np.float32(data.star['smooth'].in_units('pc')),  # 2x smoothing length, following NIHAO convention
+        'x_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 0]),
+        'y_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 1]),
+        'z_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 2]),
+        'x_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 0]),
+        'y_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 1]),
+        'z_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 2]),
+        'mass':   np.float32(data.star['mass'].in_units('Msol')[is_star]),
+        'metals': np.float32(data.star['metals'][is_star]),
+        'age':    np.float32(data.star['age'].in_units('yr')[is_star]),
+        'smooth': 2 * np.float32(data.star['smooth'].in_units('pc')[is_star]),  # 2x smoothing length, following NIHAO convention
     }
 
     print(f"  Mass range: {stars['mass'].min():.2e} - {stars['mass'].max():.2e} Msol")
