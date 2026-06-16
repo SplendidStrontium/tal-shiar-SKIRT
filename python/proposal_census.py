@@ -72,7 +72,7 @@ CSV_COLUMNS = [
     "name", "snapshot", "aperture_kpc",
     "N_star_in_ap", "Mstar_Msol", "is_dwarf",
     "N_gas_in_ap", "MHI_Msol", "SFR_window_Myr", "SFR_Msol_per_yr",
-    "hi_method",
+    "hi_method", "N_bh", "M_bh_Msol"
 ]
 
 
@@ -131,11 +131,17 @@ def compute_quantities(data, aperture_kpc, sfr_window_yr, he_fraction):
     s_r = np.sqrt((s_pos ** 2).sum(axis=1))
     g_r = np.sqrt((g_pos ** 2).sum(axis=1))
     # eliminate particles outside the aperture
-    s_in = s_r < aperture_kpc
+    # Exclude BH sink particles (tform < 0): M*, SFR, and the in-aperture
+    # star count all flow from s_in.
+    is_bh = np.asarray(data.star['tform']) < 0
+    s_in = (s_r < aperture_kpc) & ~is_bh
     g_in = g_r < aperture_kpc
 
-    # --- stellar mass ---
+    # --- stellar mass, BH mass ---
     s_mass = np.asarray(data.star['mass'].in_units('Msol'))
+    bh_in = is_bh & (s_r < aperture_kpc)
+    N_bh = int(bh_in.sum())
+    M_bh = float(s_mass[bh_in].sum())
     Mstar = float(s_mass[s_in].sum())
 
     # --- SFR over the chosen window (current mass as massform proxy) ---
@@ -167,6 +173,8 @@ def compute_quantities(data, aperture_kpc, sfr_window_yr, he_fraction):
         "SFR_window_Myr": sfr_window_yr / 1e6,
         "SFR_Msol_per_yr": SFR,
         "hi_method": hi_method,
+        "N_bh": N_bh,
+        "M_bh_Msol": M_bh
     }
 
 
@@ -228,12 +236,13 @@ def main():
     if rows:
         print("\n" + "=" * 96)
         print(f"{'name':<8}{'M*[Msun]':>13}{'dwarf':>7}{'M_HI[Msun]':>14}"
-              f"{'SFR[Msun/yr]':>15}{'N*':>9}{'Ngas':>8}")
+              f"{'SFR[Msun/yr]':>15}{'N*':>9}{'Ngas':>8}{'N_bh':>6}{'M_bh[Msun]':>13}")
         print("-" * 96)
         for r in rows:
             print(f"{r['name']:<8}{r['Mstar_Msol']:>13.3e}{str(r['is_dwarf']):>7}"
                   f"{r['MHI_Msol']:>14.3e}{r['SFR_Msol_per_yr']:>15.4f}"
-                  f"{r['N_star_in_ap']:>9d}{r['N_gas_in_ap']:>8d}")
+                  f"{r['N_star_in_ap']:>9d}{r['N_gas_in_ap']:>8d}"
+                  f"{r['N_bh']:>6d}{r['M_bh_Msol']:>13.3e}")
         print("=" * 96)
         print(f"Dwarf threshold: M* < {DWARF_MSTAR_MAX:.1e} Msun.  "
               f"Aperture: {args.aperture_kpc:.0f} kpc.")

@@ -166,6 +166,9 @@ def select_orientation_tracer(data):
     gas_r_kpc = np.sqrt((data.gas['pos'].in_units('kpc') ** 2).sum(axis=1))
     star_r_kpc = np.sqrt((data.star['pos'].in_units('kpc') ** 2).sum(axis=1))
 
+    # Exclude BH particles (tform < 0) from any star-based tracer.
+    is_real_star = np.asarray(data.star['tform']) >= 0
+
     # --- Attempt 1: cold gas ---
     gas_temp_k = data.gas['temp'].view(np.ndarray)
     cold_gas_mask = (gas_temp_k < COLD_GAS_TEMP_K) & (gas_r_kpc < TRACER_RADIUS_KPC)
@@ -179,7 +182,7 @@ def select_orientation_tracer(data):
 
     # --- Attempt 2: young stars ---
     star_age_yr = data.star['age'].in_units('yr').view(np.ndarray)
-    young_star_mask = (star_age_yr < YOUNG_STAR_AGE_YR) & (star_r_kpc < TRACER_RADIUS_KPC)
+    young_star_mask = (star_age_yr < YOUNG_STAR_AGE_YR) & (star_r_kpc < TRACER_RADIUS_KPC) & is_real_star
     young_star_mass = float(data.star['mass'].in_units('Msol')[young_star_mask].sum())
     print(f"  Young stars (age<{YOUNG_STAR_AGE_YR:.0e}yr, r<{TRACER_RADIUS_KPC}kpc): "
           f"{young_star_mask.sum()} particles, {young_star_mass:.2e} Msol")
@@ -189,7 +192,7 @@ def select_orientation_tracer(data):
         return data.star[young_star_mask], 'young_stars'
 
     # --- Attempt 3: all stars (warn) ---
-    all_star_mask = star_r_kpc < TRACER_RADIUS_KPC
+    all_star_mask = (star_r_kpc < TRACER_RADIUS_KPC) & is_real_star
     all_star_mass = float(data.star['mass'].in_units('Msol')[all_star_mask].sum())
     warnings.warn(
         f"Neither cold gas ({cold_gas_mass:.2e} Msol) nor young stars "
