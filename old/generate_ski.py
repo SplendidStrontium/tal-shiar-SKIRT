@@ -1,39 +1,36 @@
 #!/usr/bin/env python3
 """
-Generate Tal Shiar SKIRT ski files for the twelve-halo proposal sample.
+Generate Tal Shiar SKIRT ski files for a Romulus galaxy (set GALAXY_ID below).
 
-For each halo in HALOS, produces two files:
-  {halo}_dust.ski   — ExtinctionOnly with THEMIS dust medium
-  {halo}_nodust.ski — NoMedium (stellar-only baseline, no transport)
+Produces two files:
+  {GALAXY_ID}_dust.ski   — ExtinctionOnly with THEMIS dust medium
+  {GALAXY_ID}_nodust.ski — ExtinctionOnly with no medium (stellar-only baseline)
 
 Both share identical sources, instruments, wavelength grid, and inclinations
 so that F_dust / F_nodust is a clean per-orientation, per-wavelength ratio.
 
-Inclinations: face-on only (i=0) for the Reines-proposal B-K colors. The
-inclination machinery is preserved — to recover the attenuation-vs-angle
-sweep, set INCLINATIONS_DEG to list(np.linspace(0.0, 90.0, 12)).
+Inclinations: 12 values evenly spaced in i from 0° to 90° (deterministic grid
+for A(lambda, i) curves — deliberately NOT arccos-uniform, which would be
+appropriate for orientation-population sampling).
 
 Usage:
-    python generate_ski.py        # writes 2 * len(HALOS) ski files into cwd
+    python generate_ski.py
 """
 
 import numpy as np
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Sample + run configuration
+# Galaxy selection — change this for r107 / r320
+# ---------------------------------------------------------------------------
+GALAXY_ID = "r320"
+
+# ---------------------------------------------------------------------------
+# Configuration
 # ---------------------------------------------------------------------------
 
-# The fifteen halos (BH-filtered particles regenerated). Edit if your
-# intended sample differs.
-HALOS = ["r107", "r142", "r154", "r168", "r204", "r219", "r223", "r239",
-         "r284", "r306", "r316", "r320", "r330", "r372", "r429"]
-
-# Face-on only for B-K. For the attenuation thread:
-#   INCLINATIONS_DEG = list(np.linspace(0.0, 90.0, 12))
-INCLINATIONS_DEG = [0.0]
-
-NUM_PHOTONS_PRODUCTION = "5e7"   # dust run scales with this; nodust is NoMedium
+NUM_INCLINATIONS = 12
+NUM_PHOTONS_PRODUCTION = "1e7"   # override from driver for test runs
 DISTANCE_MPC = 100
 
 # Spatial grid — particle data cut at 30 kpc, give a little margin
@@ -62,8 +59,8 @@ NUM_HYDROCARBON_SIZES = 15
 # ---------------------------------------------------------------------------
 
 def inclinations_deg():
-    """Inclinations to render, in degrees (face-on only by default)."""
-    return np.asarray(INCLINATIONS_DEG, dtype=float)
+    """12 values evenly spaced in inclination from 0 to 90 degrees."""
+    return np.linspace(0.0, 90.0, NUM_INCLINATIONS)
 
 
 def instrument_block(inc_deg, idx):
@@ -193,15 +190,14 @@ def probe_system(with_dust):
 # Full ski file template
 # ---------------------------------------------------------------------------
 
-def build_ski(galaxy_id, with_dust, num_photons=NUM_PHOTONS_PRODUCTION):
+def build_ski(with_dust, num_photons=NUM_PHOTONS_PRODUCTION):
     label = "dust" if with_dust else "no-dust"
     medium = medium_system_with_dust() if with_dust else medium_system_nodust()
     mode = "ExtinctionOnly" if with_dust else "NoMedium"
     probes = probe_system(with_dust)
-    n_inc = len(inclinations_deg())
 
     return f'''<?xml version='1.0' encoding='UTF-8'?>
-<!-- Tal Shiar SKIRT: {galaxy_id}, {label}, {mode}, UV-NIR, {n_inc} inclination(s) -->
+<!-- Tal Shiar SKIRT: {GALAXY_ID}, {label}, ExtinctionOnly, UV-NIR, 12 inclinations -->
 <skirt-simulation-hierarchy type="MonteCarloSimulation" format="9" producer="Tal Shiar pipeline">
   <MonteCarloSimulation userLevel="Regular" simulationMode="{mode}" numPackets="{num_photons}">
     <random type="Random">
@@ -236,25 +232,23 @@ def build_ski(galaxy_id, with_dust, num_photons=NUM_PHOTONS_PRODUCTION):
 
 
 # ---------------------------------------------------------------------------
-# Write all halos
+# Write both files
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     outdir = Path(".")
 
-    for galaxy_id in HALOS:
-        dust_ski = build_ski(galaxy_id, with_dust=True)
-        nodust_ski = build_ski(galaxy_id, with_dust=False)
+    dust_ski = build_ski(with_dust=True)
+    nodust_ski = build_ski(with_dust=False)
 
-        dust_path = outdir / f"{galaxy_id}_dust.ski"
-        nodust_path = outdir / f"{galaxy_id}_nodust.ski"
-        dust_path.write_text(dust_ski)
-        nodust_path.write_text(nodust_ski)
+    dust_path = outdir / f"{GALAXY_ID}_dust.ski"
+    nodust_path = outdir / f"{GALAXY_ID}_nodust.ski"
+    dust_path.write_text(dust_ski)
+    nodust_path.write_text(nodust_ski)
 
-        print(f"[{galaxy_id}] wrote {dust_path.name} ({len(dust_ski):,} B)  "
-              f"+ {nodust_path.name} ({len(nodust_ski):,} B)")
-
+    print(f"Wrote {dust_path.name}   ({len(dust_ski):,} bytes)")
+    print(f"Wrote {nodust_path.name} ({len(nodust_ski):,} bytes)")
     print()
-    print(f"Halos:            {len(HALOS)}  ->  {2 * len(HALOS)} ski files")
-    print(f"Photons (dust):   {NUM_PHOTONS_PRODUCTION}")
-    print("Inclinations (deg):", ", ".join(f"{x:.1f}" for x in inclinations_deg()))
+    print("Inclinations (deg):")
+    for i, inc in enumerate(inclinations_deg()):
+        print(f"  i{i:02d}: {inc:6.3f}")

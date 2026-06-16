@@ -23,3 +23,7 @@ Initial run of project aims to study effect of dust and orientation on light att
 7. plot_attenuation          // interpret SKIRT files
 8. compare_galaxies          // compare galaxy attenuation curves
 9. make_money_shots          // assign colors to SKIRT-assigned bands
+10. detect_heavy_stars.py   // black holes are star particles with tform < 0
+11. generate_ski_12_inc.py  // old generate_ski file
+12. make_dust_comparison.py // dust/nodust comparison
+13. proposal_census.py      // read in NGC and analyze

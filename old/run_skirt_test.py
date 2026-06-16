@@ -2,13 +2,11 @@
 """
 run_skirt_test.py — Tal Shiar SKIRT Pipeline, test driver
 
-Runs a low-photon validation of the SKIRT setup for one halo at a single
-inclination (face-on by default) with both the dust and no-dust ski files,
-then projects the cost of the full face-on production sweep.
+Runs a low-photon validation of the SKIRT setup for r142 at a single
+inclination (face-on by default) with both the dust and no-dust ski files.
 
 What this does:
-    1. Reads the production {galaxy}_dust.ski / {galaxy}_nodust.ski files
-       from the ski directory (src/ski/).
+    1. Reads the production r142_dust.ski and r142_nodust.ski files
     2. Rewrites them with (a) test photon count, (b) test pixel count,
        (c) only the requested inclinations, into a test_runs/ subdir
     3. Runs `skirt -e` (emulation mode) on each to catch schema errors
@@ -23,17 +21,18 @@ Why a separate driver instead of re-running generate_ski.py:
       without touching generate_ski.py
 
 Usage:
-    # Default: r142, face-on, 1e6 photons, 256 pixels
+    # Default: face-on only, 1e6 photons, 256 pixels
     python run_skirt_test.py
 
-    # A different halo
-    python run_skirt_test.py --galaxy r320
+    # Custom: edge-on + face-on
+    python run_skirt_test.py --inclinations 0 90
 
     # More photons
     python run_skirt_test.py --photons 5e6
 
-Assumes the halo's particle files live at
-/mnt/data0/pkrsnak/romulus/{galaxy}/ (override with --particle-dir).
+Assumes you are running from the directory containing stars.txt,
+youngStars.txt, gas.txt (i.e. /mnt/data0/pkrsnak/romulus/r142/), OR
+that you have pointed --particle-dir at that directory.
 """
 
 import argparse
@@ -46,20 +45,9 @@ from pathlib import Path
 from time import perf_counter
 
 # ---------------------------------------------------------------------------
-# Layout
+# Galaxy selection — change this for r107 / r320
 # ---------------------------------------------------------------------------
-# The .ski files live in src/ski/. This script is in src/, so the ski dir is
-# a subdirectory of the script's own directory. SET THIS if you rename it.
-SKI_DIRNAME = "ski"
-
-# Resolve from __file__ so it works regardless of the cwd you launch from.
-SCRIPT_DIR = Path(__file__).resolve().parent          # .../tal-shiar-SKIRT/src
-DEFAULT_SKI_DIR = SCRIPT_DIR / SKI_DIRNAME             # .../src/ski
-
-# Production configuration this test projects toward (kept in sync with
-# generate_ski.py). Used only for the cost projection at the end.
-PROD_PHOTONS = 5e7
-N_HALOS = 15            # full face-on sweep
+GALAXY_ID = "r107"
 
 # Default SKIRT binary — override with --skirt if needed
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
@@ -183,14 +171,10 @@ def run_skirt(skirt_bin, ski_path, workdir):
 
 def main():
     parser = argparse.ArgumentParser(description="SKIRT test-run driver for Tal Shiar pipeline")
-    parser.add_argument("--galaxy", default="r142",
-                        help="Halo to test (default: r142)")
-    parser.add_argument("--particle-dir", default=None,
-                        help="Dir with stars.txt, youngStars.txt, gas.txt "
-                             "(default: /mnt/data0/pkrsnak/romulus/{galaxy})")
-    parser.add_argument("--ski-dir", default=None,
-                        help=f"Directory containing {{galaxy}}_dust.ski / "
-                             f"{{galaxy}}_nodust.ski (default: {DEFAULT_SKI_DIR})")
+    parser.add_argument("--particle-dir", default=f"/mnt/data0/pkrsnak/romulus/{GALAXY_ID}",
+                        help="Directory containing stars.txt, youngStars.txt, gas.txt")
+    parser.add_argument("--ski-dir", default=".",
+                        help=f"Directory containing {GALAXY_ID}_dust.ski and {GALAXY_ID}_nodust.ski")
     parser.add_argument("--test-subdir", default="test_runs",
                         help="Subdirectory of --particle-dir for test outputs")
     parser.add_argument("--photons", default="1e6",
@@ -207,20 +191,13 @@ def main():
                         help="Only run the dust ski file")
     args = parser.parse_args()
 
-    galaxy = args.galaxy
-
-    # Resolve galaxy-dependent defaults after we know --galaxy
-    particle_dir = Path(args.particle_dir).resolve() if args.particle_dir \
-        else Path(f"/mnt/data0/pkrsnak/romulus/{galaxy}").resolve()
-    ski_dir = Path(args.ski_dir).resolve() if args.ski_dir \
-        else DEFAULT_SKI_DIR
+    particle_dir = Path(args.particle_dir).resolve()
+    ski_dir = Path(args.ski_dir).resolve()
     test_dir = particle_dir / args.test_subdir
     test_dir.mkdir(exist_ok=True)
 
     # --- Preflight: confirm particle files exist ---
-    print(f"Galaxy:       {galaxy}")
     print(f"Particle dir: {particle_dir}")
-    print(f"Ski dir:      {ski_dir}")
     required = ["stars.txt", "youngStars.txt", "gas.txt"]
     missing = [f for f in required if not (particle_dir / f).exists()]
     if missing:
@@ -233,15 +210,13 @@ def main():
         print(f"  {f}: {size_mb:.2f} MB, {nlines} lines")
 
     # --- Preflight: confirm ski files exist ---
-    dust_src = ski_dir / f"{galaxy}_dust.ski"
-    nodust_src = ski_dir / f"{galaxy}_nodust.ski"
+    dust_src = ski_dir / f"{GALAXY_ID}_dust.ski"
+    nodust_src = ski_dir / f"{GALAXY_ID}_nodust.ski"
     if not dust_src.exists():
-        print(f"ERROR: {dust_src} not found "
-              f"(check SKI_DIRNAME='{SKI_DIRNAME}' or pass --ski-dir)")
+        print(f"ERROR: {dust_src} not found")
         sys.exit(1)
     if not nodust_src.exists():
-        print(f"ERROR: {nodust_src} not found "
-              f"(check SKI_DIRNAME='{SKI_DIRNAME}' or pass --ski-dir)")
+        print(f"ERROR: {nodust_src} not found")
         sys.exit(1)
 
     # --- Preflight: confirm SKIRT binary exists and is executable ---
@@ -256,16 +231,16 @@ def main():
     print(f"  output dir:   {test_dir}")
 
     # --- Stage test ski files ---
-    # Symlink particle files into test_dir so SKIRT can find them via the
-    # relative paths in the ski.
+    # Copy particle files into test_dir (or symlink) so SKIRT can find them
+    # via relative paths in the ski.
     for f in required:
         link = test_dir / f
         if link.exists() or link.is_symlink():
             link.unlink()
         link.symlink_to(particle_dir / f)
 
-    dust_test = test_dir / f"{galaxy}_dust_test.ski"
-    nodust_test = test_dir / f"{galaxy}_nodust_test.ski"
+    dust_test = test_dir / f"{GALAXY_ID}_dust_test.ski"
+    nodust_test = test_dir / f"{GALAXY_ID}_nodust_test.ski"
 
     print("\nRewriting ski files for test...")
     n_dust = rewrite_ski_for_test(dust_src, dust_test,
@@ -310,27 +285,21 @@ def main():
         total += dt
     print(f"  {'total':8s}: {total:7.1f}s")
 
-    # Projection to production (face-on, PROD_PHOTONS, dust+nodust, N_HALOS).
-    # Dust scales ~linearly with photon count; nodust is NoMedium (no transport)
-    # and barely depends on photons, so we project it flat. Pixels are nearly
-    # free, so the 256 -> 500 change is ignored. Assumes the test was run
-    # face-on (matching production); a multi-inclination test will overestimate.
-    test_photons = float(args.photons)
-    photon_scale = PROD_PHOTONS / test_photons
-    dust_dt = timings.get("dust", (0.0, 0))[0]
-    nodust_dt = timings.get("nodust", (0.0, 0))[0]
-    per_halo = dust_dt * photon_scale + nodust_dt
-    full_sweep = per_halo * N_HALOS
+    # Projection to production: 10x photons, ~4x pixels (500/256),
+    # 12x inclinations. Photons dominate SKIRT runtime; pixels are nearly free.
+    n_inc_test = len(args.inclinations)
+    photon_scale = float(args.photons)
+    prod_scale = (1e7 / photon_scale) * (12 / n_inc_test)
+    prod_s = total * prod_scale
     print()
-    print(f"Production projection (face-on, {PROD_PHOTONS:.0e} photons, dust+nodust):")
-    print(f"  per halo:   ~{per_halo:7.0f} s  = ~{per_halo/60:.1f} min")
-    print(f"  {N_HALOS} halos:   ~{full_sweep:7.0f} s  = ~{full_sweep/60:.1f} min "
-          f"= ~{full_sweep/3600:.2f} hr")
-    print(f"  (dust photon scale: {photon_scale:.0f}x; nodust projected flat)")
+    print(f"Production projection (1e7 photons × 12 inclinations × 2 runs):")
+    print(f"  ~{prod_s:.0f} s = ~{prod_s/60:.1f} min = ~{prod_s/3600:.2f} hr")
+    print(f"  (photon-count scale: {1e7/photon_scale:.1f}x, "
+          f"inclination scale: {12/n_inc_test:.1f}x)")
 
     # --- List output files ---
     print(f"\nOutput files in {test_dir}:")
-    outputs = sorted(test_dir.glob(f"{galaxy}_*"))
+    outputs = sorted(test_dir.glob(f"{GALAXY_ID}_*"))
     for p in outputs[:20]:
         size = p.stat().st_size
         size_str = f"{size/1e6:.1f} MB" if size > 1e6 else f"{size/1e3:.1f} KB"
