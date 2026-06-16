@@ -4,9 +4,11 @@ Tal Shiar SKIRT is a pipeline that takes in data from hydrodynamic cosmological 
 
 Workflow is heavily inspired by the [NIHAO-SKIRT-Pipeline](https://github.com/ntf229/NIHAO-SKIRT-Pipeline), adapted for initial use on zoom-in elements of the [Romulus simulation](https://mtremmel.github.io/research/romulus.html). Romulus has been tuned to exhibit high rates of BH feedback, so a number of parameters needed to be adjusted to account for less total ISM and less-disk-like galaxies. Temperature at which we assume dust can exist in hot gas also needed to be increased vs. the Camps 8000K used in NIHAO.
 
-Initial run of project aims to study effect of dust and orientation on light attenuation on UV-optical-NIR wavelengths.
+Initial run of project, presented May 1, 2026, aimed to study effect of dust and orientation on light attenuation on UV-optical-NIR wavelengths.
 
-## Primary pipeline in /src:
+Current run of project, slated to present July 1, 2026, analyzes B-K color of halos in order to make an apples-to-apples comparison to galaxies in the Nearby Galaxy Catalog.
+
+## primary pipeline in /src:
 1. make_particles.py         // create particle arrays for SKIRT
 2. run_skirt_test.py         // test SKIRT set-up w/o running full SKIRT
 3. run_skirt_production.py   // run SKIRT
