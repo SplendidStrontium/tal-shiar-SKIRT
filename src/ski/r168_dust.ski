@@ -66,7 +66,7 @@
     <instrumentSystem type="InstrumentSystem">
       <InstrumentSystem>
         <defaultWavelengthGrid type="WavelengthGrid">
-          <LogWavelengthGrid minWavelength="0.1 micron" maxWavelength="2.5 micron" numWavelengths="80"/>
+          <LogWavelengthGrid minWavelength="0.1 micron" maxWavelength="2.5 micron" numWavelengths="150"/>
         </defaultWavelengthGrid>
         <instruments type="Instrument">
           <FullInstrument instrumentName="i00_00p00deg" distance="100 Mpc" inclination="0.0000 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
@@ -74,6 +74,7 @@
               <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
             </wavelengthGrid>
           </FullInstrument>
+          <SEDInstrument instrumentName="sed_i00_00p00deg" distance="100 Mpc" inclination="0.0000 deg" azimuth="0 deg" roll="0 deg" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false"/>
         </instruments>
       </InstrumentSystem>
     </instrumentSystem>

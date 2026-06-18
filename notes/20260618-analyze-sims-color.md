@@ -20,3 +20,12 @@ When we read the SED, there are not enough points to make our information meanin
 
 ## corrections to generate_ski.py
 more wavelengths
+
+## ready to rerun
+regenerated ski files with more wavelengths, ran some tests, ready to rerun
+
+> python run_skirt_production.py --detach
+> tail -f production_sweep.log
+
+## then later when done:
+> python extract_sim_colors.py --all
