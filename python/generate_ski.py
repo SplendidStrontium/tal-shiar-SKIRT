@@ -44,7 +44,7 @@ NUM_PIXELS = 500            # production; driver can override for test
 # Wavelength range — UV through NIR
 WL_MIN_MICRON = 0.1
 WL_MAX_MICRON = 2.5
-NUM_WAVELENGTHS = 80        # log-spaced SED resolution
+NUM_WAVELENGTHS = 150        # log-spaced SED resolution
 
 # Grid refinement
 MIN_LEVEL = 6
@@ -81,12 +81,20 @@ def instrument_block(inc_deg, idx):
             </wavelengthGrid>
           </FullInstrument>'''
 
+def sed_instrument_block(inc_deg, idx):
+    """Spatially-integrated SED on the default fine LogWavelengthGrid.
+    This is where the B-K colors come from; the FullInstrument keeps its
+    band grid for the RGB images."""
+    name = f"sed_i{idx:02d}_{inc_deg:05.2f}deg".replace(".", "p")
+    return f'''          <SEDInstrument instrumentName="{name}" distance="{DISTANCE_MPC} Mpc" inclination="{inc_deg:.4f} deg" azimuth="0 deg" roll="0 deg" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false"/>'''
 
 def all_instruments():
     incs = inclinations_deg()
-    blocks = [instrument_block(inc, i) for i, inc in enumerate(incs)]
+    blocks = []
+    for i, inc in enumerate(incs):
+        blocks.append(instrument_block(inc, i))       # FullInstrument: band images (unchanged)
+        blocks.append(sed_instrument_block(inc, i))   # SEDInstrument: fine SED for B-K
     return "\n".join(blocks)
-
 
 def sources_block():
     """Two stellar populations: old (FSPS/Chabrier) + young (MAPPINGS)."""
