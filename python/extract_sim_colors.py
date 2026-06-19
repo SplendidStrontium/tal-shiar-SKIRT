@@ -38,6 +38,7 @@ ROMULUS_DIR = "/mnt/data0/pkrsnak/romulus"
 HALOS = ["r107", "r142", "r154", "r168", "r204", "r219", "r223", "r239",
          "r284", "r306", "r316", "r320", "r330", "r372", "r429"]
 SED_TEMPLATE = "{halo}/production/{halo}_dust_sed_i00_00p00deg_sed.dat"
+NODUST_SED_TEMPLATE = "{halo}/production/{halo}_nodust_sed_i00_00p00deg_sed.dat"
 
 # >>> mentor-review-pending: the catalog B is Johnson B_T; Johnson vs Bessell B
 #     differs by <~0.05 mag. GROUND_JOHNSON_B is the matching choice.
@@ -124,15 +125,32 @@ def synth_BK(wave_AA, flam):
     return float(mB), float(mK)
 
 
-def process(halo, verbose=False):
-    path = os.path.join(ROMULUS_DIR, SED_TEMPLATE.format(halo=halo))
+def _bk_from_template(halo, template):
+    """Return (mB, mK, meta) for a halo's SED of a given kind, or None if absent."""
+    path = os.path.join(ROMULUS_DIR, template.format(halo=halo))
     if not os.path.exists(path):
-        print(f"  [missing SED] {path}", file=sys.stderr)
         return None
     wave_AA, flam, meta = load_sed_as_flam(path)
     mB, mK = synth_BK(wave_AA, flam)
+    meta["wave_AA"] = wave_AA
+    return mB, mK, meta
+
+
+def process(halo, verbose=False):
+    dust = _bk_from_template(halo, SED_TEMPLATE)
+    if dust is None:
+        print(f"  [missing dust SED] {halo}", file=sys.stderr)
+        return None
+    mB, mK, meta = dust
+    bk_dust = mB - mK
+
+    nodust = _bk_from_template(halo, NODUST_SED_TEMPLATE)
+    bk_nodust = (nodust[0] - nodust[1]) if nodust is not None else float("nan")
+    internal_reddening = bk_dust - bk_nodust   # what the dust model adds, in B-K
 
     if verbose:
+        wave_AA = meta["wave_AA"]
+        path = os.path.join(ROMULUS_DIR, SED_TEMPLATE.format(halo=halo))
         print(f"--- {halo} ---\n  raw header:")
         with open(path) as fh:
             for line in fh:
@@ -144,15 +162,18 @@ def process(halo, verbose=False):
               f"ncols={meta['ncols']}")
         print(f"  wavelength span: {wave_AA.min():.0f}-{wave_AA.max():.0f} AA "
               f"({len(wave_AA)} points)")
-        b_ok = wave_AA.min() < 3600 and wave_AA.max() > 5500   # B coverage
-        k_ok = wave_AA.max() > 23000                            # Ks coverage
+        b_ok = wave_AA.min() < 3600 and wave_AA.max() > 5500
+        k_ok = wave_AA.max() > 23000
         if not (b_ok and k_ok):
             print("  !! WARNING: SED may not fully cover B (~3600-5500 AA) and/or "
                   "Ks (~19000-23500 AA). Check the instrument wavelength grid.")
-        print(f"  B={mB:.3f}  Ks={mK:.3f}  ->  B-K = {mB - mK:.3f}")
+        print(f"  dust   B-K = {bk_dust:.3f}")
+        print(f"  nodust B-K = {bk_nodust:.3f}  (intrinsic stellar color)")
+        print(f"  internal reddening (dust - nodust) = {internal_reddening:+.3f}")
         print("  (only B-K is meaningful; per-band zero-points are not distance-calibrated)")
 
-    return dict(halo=halo, mag_B=mB, mag_Ks=mK, BK=mB - mK,
+    return dict(halo=halo, mag_B=mB, mag_Ks=mK, BK=bk_dust,
+                BK_nodust=bk_nodust, internal_reddening=internal_reddening,
                 flux_style=meta["flux_style"])
 
 
@@ -174,8 +195,16 @@ def main():
     df.to_csv(args.out, index=False)
     print(df.to_string(index=False))
     print(f"\nwrote {args.out}  ({len(df)}/{len(HALOS)} halos)")
-    print(f"B-K range: {df['BK'].min():.2f} to {df['BK'].max():.2f}, "
-          f"median {df['BK'].median():.2f}")
+    print(f"dust   B-K: median {df['BK'].median():.2f}  "
+          f"range {df['BK'].min():.2f}-{df['BK'].max():.2f}")
+    if df['BK_nodust'].notna().any():
+        print(f"nodust B-K: median {df['BK_nodust'].median():.2f}  "
+              f"range {df['BK_nodust'].min():.2f}-{df['BK_nodust'].max():.2f}")
+        print(f"internal reddening from dust: median "
+              f"{df['internal_reddening'].median():+.2f} mag in B-K")
+        print("  -> compare nodust median to the observed median (~2.40):")
+        print("     if nodust already ~observed, the +offset is the dust model;")
+        print("     if nodust is still red, it's the stellar populations.")
 
 
 if __name__ == "__main__":
