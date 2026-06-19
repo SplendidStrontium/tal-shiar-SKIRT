@@ -35,3 +35,39 @@ internal reddening from dust: median +0.27 mag in B-K
 But a rerun does not change the bottom bracket; nodust is the least red of the runs, and a run at 8K instead of 30K gas temp would only change the top limit, and is perhaps not a good guess for hot ROMULUS gas anyway.
 
 ## created plots, moving forward
+(base) pkrsnak@hamilton:~/tal-shiar-SKIRT/python$ python compare_colors.py 
+observed (clean):  n=221  median=2.40  range 1.47-4.04
+simulated (dust):  n= 15  median=2.99  range 2.44-4.50
+simulated (nodust):n= 15  median=2.67  range 2.39-3.79
+
+KS two-sample:    D=0.731  p=4.26e-08
+/home/pkrsnak/tal-shiar-SKIRT/python/compare_colors.py:63: UserWarning: p-value floored: true value smaller than 0.001. Consider specifying `method` (e.g. `method=stats.PermutationMethod()`.)
+  ad = stats.anderson_ksamp([obs, sim])
+Anderson-Darling: A2=19.808  p=0.001
+median offset (dust sim - obs): +0.59
+KS (nodust vs obs): D=0.499  p=0.000957
+median offset (nodust sim - obs): +0.28
+--> dust-treatment bracket on sim median offset: +0.28 (nodust)  to  +0.59 (30,000 K dust)
+NOTE: n_sim=15 -> modest power; read p-values with that in mind.
+
+wrote bk_comparison.pdf (+ .png)
+(base) pkrsnak@hamilton:~/tal-shiar-SKIRT/python$ python build_figures.py 
+sim halos with mass: 15  (with-BH=11, no-BH=4)
+observed clean: 221
+wrote color_mass_diagram.pdf (+ .png)
+
+BH split [dust (observable)]:
+  with-BH n=11  median 3.04
+  no-BH   n=4  median 2.89
+  median difference (BH - noBH): +0.14
+  KS: D=0.477  p=0.408
+  permutation test on median diff: p=0.198
+
+BH split [intrinsic (no dust)]:
+  with-BH n=11  median 2.70
+  no-BH   n=4  median 2.64
+  median difference (BH - noBH): +0.06
+  KS: D=0.295  p=0.895
+  permutation test on median diff: p=0.56
+  NOTE: n=11+4 is small; this test has low power and a non-detection is not evidence of 'no difference'.
+wrote bh_split.pdf (+ .png)
