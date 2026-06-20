@@ -132,7 +132,7 @@ def _bh_panel(ax, a, b, ylabel, title):
     ax.set_xlim(-0.5, 1.5)
 
 
-def bh_split(sim, out):
+def bh_split(sim, out, show_ks=False):
     # one panel per available color: dust (observable) and, if present, nodust
     cols = [("BK", "dust (observable)")]
     if "BK_nodust" in sim.columns and sim["BK_nodust"].notna().any():
@@ -159,8 +159,12 @@ def bh_split(sim, out):
                              sharey=True, squeeze=False)
     for j, (ax, (a, b, title, ks)) in enumerate(zip(axes[0], panels)):
         _bh_panel(ax, a, b, "B - K (Vega)" if j == 0 else "", title)
-        ax.annotate(f"KS p = {ks.pvalue:.2f}", xy=(0.05, 0.95),
-                    xycoords="axes fraction", fontsize=9, va="top")
+        if show_ks:
+            note = f"KS p = {ks.pvalue:.2f}"
+        else:
+            note = f"BH - no BH:\n{np.median(a) - np.median(b):+.2f} mag"
+        ax.annotate(note, xy=(0.05, 0.95), xycoords="axes fraction",
+                    fontsize=9, va="top")
     fig.suptitle("Black-hole color split (ROMULUS): with-BH vs. no-BH",
                  fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.95])
@@ -174,6 +178,9 @@ def main():
     ap.add_argument("--sim", default="sim_colors.csv")
     ap.add_argument("--census", default="proposal_census.csv")
     ap.add_argument("--observed", default="catalog_dered.csv")
+    ap.add_argument("--show-ks", action="store_true",
+                    help="annotate the BH split with KS p (for talks); "
+                         "default shows the median color difference")
     args = ap.parse_args()
 
     sim = load_sim(args.sim, args.census)
@@ -183,7 +190,7 @@ def main():
     print(f"observed clean: {len(obs)}")
 
     color_mass_diagram(sim, obs, "color_mass_diagram.pdf")
-    bh_split(sim, "bh_split.pdf")
+    bh_split(sim, "bh_split.pdf", show_ks=args.show_ks)
 
 
 if __name__ == "__main__":
