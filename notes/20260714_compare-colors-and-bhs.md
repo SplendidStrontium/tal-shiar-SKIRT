@@ -30,3 +30,8 @@ median delta  : +1.181 mag
 mean delta    : +1.289 mag
 std delta     : 0.472 mag
 range         : +0.708 to +2.368
+
+## BH comparison
+I have five snapshots, these notably each have more than one halo in each, so I know I need to select the halos within, with the amiga file helps us do.
+
+Each snapshot has four variations, which have either no black hole or three different versions of black hole formation/feedback parameters.
