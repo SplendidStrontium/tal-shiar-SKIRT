@@ -35,3 +35,36 @@ range         : +0.708 to +2.368
 I have five snapshots, these notably each have more than one halo in each, so I know I need to select the halos within, with the amiga file helps us do.
 
 Each snapshot has four variations, which have either no black hole or three different versions of black hole formation/feedback parameters.
+
+## differences between snapshots
+- dEtaDiffusion: timestep accuracy for therm/metal diffusion
+  - noBH: 0.3
+  - BH:   0.15
+  - BH6:  0.3
+  - BH8:  0.3
+
+- dBHSinkFeedbackEff: how much energy goes into env
+  - BH:  0.005
+  - BH6: 0.05
+  - BH8: 0.005
+
+- dBHSinkColdDen: density above which BH accretes cold gas
+  - BH:  100
+  - BH6: 0.2
+  - BH8: 0.2
+
+## to summarize
+
+              noBH    BH      BH6   BH8
+dEtaDiff      0.3     0.15    0.3   0.3
+dBHSinkFeed   --      0.005   0.05  0.005
+dBHSinkCld    --      100     0.2   0.2
+
+## control?
+it probably makes most sense to compare noBH to BH, and BH6 to BH8
+
+## pipeline gotchas
+- naming RESOLVED: on-disk snapshot names are regular (r488_BH6 → ...HsbBH6.004096, etc). The param files' achOutName ("BHT", "BH2") are stale pre-rename working names — never parse achOutName, just glob for *.004096
+- iBinaryOutput: noBH/BH = 0 (ASCII aux arrays), BH6/BH8 = 1 (binary)
+  — pynbody handles both; hand-rolled readers won't
+- dMaxGasMass typo in noBH and BH params: `1.66431-11` (missing e)
