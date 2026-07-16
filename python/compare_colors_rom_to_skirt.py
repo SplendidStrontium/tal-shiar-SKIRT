@@ -28,18 +28,28 @@ skirt["skirt_color"] = skirt["BK_nodust"]
 # validate=    -> raises if either side has a duplicate HaloID, which would
 #                 silently multiply rows and corrupt every statistic after.
 comp_df = pd.merge(
-    rom[["HaloID", "rom_color"]],
-    skirt[["HaloID", "skirt_color"]],
+    rom[["HaloID", "Bmag", "Kmag", "rom_color"]],
+    skirt[["HaloID", "absmag_B_nodust", "absmag_Ks_nodust", "skirt_color"]],
     on="HaloID",
     how="outer",
     indicator="source",
     validate="one_to_one",
 ).sort_values("HaloID")
 
+# ROMULUS "Bmag" is intrinsic by convention; SKIRT "absmag_B_nodust" says so
+# explicitly. That asymmetry is what produced the silent all-NaN bug earlier.
+# Kill it here so the plotting script can't reach for the wrong one.
+comp_df = comp_df.rename(columns={
+    "Bmag": "rom_B", "Kmag": "rom_K",
+    "absmag_B_nodust": "skirt_B", "absmag_Ks_nodust": "skirt_K",
+})
+
 # --- compare ------------------------------------------------------
  
 # Positive delta = SKIRT is redder than ROMULUS.
-comp_df["delta"] = comp_df["skirt_color"] - comp_df["rom_color"]
+comp_df["delta"]   = comp_df["skirt_color"] - comp_df["rom_color"]
+comp_df["delta_B"] = comp_df["skirt_B"] - comp_df["rom_B"]
+comp_df["delta_K"] = comp_df["skirt_K"] - comp_df["rom_K"]
  
 matched = comp_df[comp_df["source"] == "both"]
  
@@ -58,6 +68,6 @@ print(f"matched halos : {len(matched)}")
 print(f"median delta  : {matched['delta'].median():+.3f} mag")
 print(f"mean delta    : {matched['delta'].mean():+.3f} mag")
 print(f"std delta     : {matched['delta'].std():.3f} mag")
-print(f"range         : {matched['delta'].min():+.3f} to {matched['delta'].max():+.3f}")
+print(f"range         : {matched['delta'].min():+.3f} to {matched['delta'].max():+.3f}") 
  
 comp_df.to_csv("rom_vs_skirt_colors.csv", index=False)

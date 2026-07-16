@@ -84,3 +84,6 @@ r320   -18.084    -21.457          -19.099           -21.566
 r330   -17.877    -20.528          -17.925           -20.525
 r372   -17.847    -20.669          -17.998           -20.671
 r429   -17.256    -20.219          -17.343           -20.219
+
+## tweak color histogram to produce three plots
+first improve compare_colors, then work on histogram building
