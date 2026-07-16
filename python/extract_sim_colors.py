@@ -13,8 +13,11 @@ carry the galaxy's own internal dust, neither carries a Milky Way screen.
 Synthetic photometry is done with pyphot (bundled Vega zero-points). B-K is a
 flux RATIO, so the absolute SKIRT flux normalization is irrelevant; only the
 spectral SHAPE, the wavelength scale, and the filter/Vega zero-points matter.
-That is why the per-band magnitudes below are not distance-calibrated but the
-color is exact.
+Synthetic photometry is done with pyphot (bundled Vega zero-points). The SKIRT
+SED is F_nu in Jy at the instrument distance (DISTANCE_MPC), converted to
+F_lambda with the full c/lambda^2 factor, so per-band magnitudes ARE physically
+calibrated: mag_* are apparent at DISTANCE_MPC, absmag_* are absolute. B-K is a
+flux ratio and is independent of both distance and flux normalization.
 
 Usage:
     python extract_sim_colors.py                 # inspect one halo (verbose)
@@ -23,6 +26,8 @@ Usage:
 
 Run the verbose single-halo mode FIRST and check the printed header parse
 (flux style, wavelength span) before trusting --all.
+
+Note B_mag is with dust, and B_mag_nodust is the intrinsic stellar color.
 """
 
 import argparse
@@ -48,6 +53,8 @@ FILTER_KS = "2MASS_Ks"
 _WAVE_TO_AA = {"angstrom": 1.0, "a": 1.0, "aa": 1.0, "nm": 10.0,
                "micron": 1e4, "um": 1e4, "micrometer": 1e4, "m": 1e10}
 
+DISTANCE_MPC = 100.0                                  # matches generate_ski.py + SED header
+DM = 5.0 * np.log10(DISTANCE_MPC * 1e6 / 10.0)        # = 35.00
 
 def parse_header(path):
     """Return [(col_index, description), ...] from SKIRT '# column N:' lines."""
@@ -103,8 +110,10 @@ def load_sed_as_flam(path):
     wave_AA = wave * _WAVE_TO_AA.get((wu or "micron").strip().lower(), 1e4)
     if fs == "neutral":            # lambda*F_lambda -> divide by lambda
         flam = flux / wave_AA
-    elif fs == "fnu":              # F_nu -> F_lambda ~ F_nu / lambda^2
-        flam = flux / wave_AA ** 2
+    elif fs == "fnu":              # F_nu -> F_lambda, unit-correct
+        flam = (flux * u.Unit(fu)).to(
+            u.erg / u.s / u.cm ** 2 / u.AA,
+            equivalencies=u.spectral_density(wave_AA * u.AA)).value
     else:                          # already F_lambda shape
         flam = flux.copy()
 
@@ -145,7 +154,11 @@ def process(halo, verbose=False):
     bk_dust = mB - mK
 
     nodust = _bk_from_template(halo, NODUST_SED_TEMPLATE)
-    bk_nodust = (nodust[0] - nodust[1]) if nodust is not None else float("nan")
+    if nodust is not None:
+        mB_nodust, mK_nodust = nodust[0], nodust[1]
+    else:
+        mB_nodust = mK_nodust = float("nan")
+    bk_nodust = mB_nodust - mK_nodust
     internal_reddening = bk_dust - bk_nodust   # what the dust model adds, in B-K
 
     if verbose:
@@ -170,10 +183,17 @@ def process(halo, verbose=False):
         print(f"  dust   B-K = {bk_dust:.3f}")
         print(f"  nodust B-K = {bk_nodust:.3f}  (intrinsic stellar color)")
         print(f"  internal reddening (dust - nodust) = {internal_reddening:+.3f}")
-        print("  (only B-K is meaningful; per-band zero-points are not distance-calibrated)")
+        print(f"  apparent @ {DISTANCE_MPC:.0f} Mpc:  B = {mB:.3f}  Ks = {mK:.3f}")
+        print(f"  absolute (DM = {DM:.2f}):  B = {mB - DM:.3f}  Ks = {mK - DM:.3f}")
 
-    return dict(halo=halo, mag_B=mB, mag_Ks=mK, BK=bk_dust,
-                BK_nodust=bk_nodust, internal_reddening=internal_reddening,
+    return dict(halo=halo,
+                mag_B=mB, mag_Ks=mK,                              # apparent @ 100 Mpc
+                absmag_B=mB - DM, absmag_Ks=mK - DM,              # absolute
+                mag_B_nodust=mB_nodust, mag_Ks_nodust=mK_nodust,
+                absmag_B_nodust=mB_nodust - DM,
+                absmag_Ks_nodust=mK_nodust - DM,
+                BK=bk_dust, BK_nodust=bk_nodust,
+                internal_reddening=internal_reddening,
                 flux_style=meta["flux_style"])
 
 
