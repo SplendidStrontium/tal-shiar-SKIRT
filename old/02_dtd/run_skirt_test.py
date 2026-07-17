@@ -50,16 +50,16 @@ from time import perf_counter
 # ---------------------------------------------------------------------------
 # The .ski files live in src/ski/. This script is in src/, so the ski dir is
 # a subdirectory of the script's own directory. SET THIS if you rename it.
-SKI_DIRNAME = "ski_enterprise"
+SKI_DIRNAME = "ski"
 
 # Resolve from __file__ so it works regardless of the cwd you launch from.
 SCRIPT_DIR = Path(__file__).resolve().parent          # .../tal-shiar-SKIRT/src
-DEFAULT_SKI_DIR = SCRIPT_DIR / SKI_DIRNAME             # .../src/ski_enterprise
+DEFAULT_SKI_DIR = SCRIPT_DIR / SKI_DIRNAME             # .../src/ski
 
 # Production configuration this test projects toward (kept in sync with
 # generate_ski.py). Used only for the cost projection at the end.
 PROD_PHOTONS = 5e7
-N_RUNS = 20             # full dust+nodust sweep is 2 x N_RUNS SKIRT runs
+N_HALOS = 15            # full face-on sweep
 
 # Default SKIRT binary — override with --skirt if needed
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
@@ -104,8 +104,6 @@ def rewrite_ski_for_test(src_path, dst_path, num_photons, num_pixels, keep_incs_
         r'<FullInstrument\s[^>]*>.*?</FullInstrument>', re.DOTALL
     )
     text = pattern.sub(instrument_filter, text)
-    sed_pattern = re.compile(r'<SEDInstrument\s[^>]*/>')
-    text = sed_pattern.sub(instrument_filter, text)
 
     # Clean up any empty lines left by removed blocks
     text = re.sub(r'\n\s*\n\s*\n', '\n\n', text)
@@ -185,8 +183,8 @@ def run_skirt(skirt_bin, ski_path, workdir):
 
 def main():
     parser = argparse.ArgumentParser(description="SKIRT test-run driver for Tal Shiar pipeline")
-    parser.add_argument("--galaxy", default="r741",
-                        help="Run to test (e.g. r741, r488_BH8)")
+    parser.add_argument("--galaxy", default="r142",
+                        help="Halo to test (default: r142)")
     parser.add_argument("--particle-dir", default=None,
                         help="Dir with stars.txt, youngStars.txt, gas.txt "
                              "(default: /mnt/data0/pkrsnak/romulus/{galaxy})")
@@ -199,8 +197,8 @@ def main():
                         help="Photon packet count for test (default 1e6)")
     parser.add_argument("--pixels", type=int, default=256,
                         help="Pixels per side for test images (default 256)")
-    parser.add_argument("--inclinations", type=float, nargs="+", default=[0.0, 90.0],
-                        help="Inclinations in degrees to keep (default: 0, 90)")
+    parser.add_argument("--inclinations", type=float, nargs="+", default=[0.0],
+                        help="Inclinations in degrees to keep (default: 0 only)")
     parser.add_argument("--skirt", default=DEFAULT_SKIRT,
                         help=f"Path to skirt binary (default: {DEFAULT_SKIRT})")
     parser.add_argument("--skip-dust", action="store_true",
@@ -213,10 +211,10 @@ def main():
 
     # Resolve galaxy-dependent defaults after we know --galaxy
     particle_dir = Path(args.particle_dir).resolve() if args.particle_dir \
-        else Path(f"/mnt/data0/pkrsnak/romulus/enterprise/products/{galaxy}/particles").resolve()
+        else Path(f"/mnt/data0/pkrsnak/romulus/{galaxy}").resolve()
     ski_dir = Path(args.ski_dir).resolve() if args.ski_dir \
         else DEFAULT_SKI_DIR
-    test_dir = particle_dir.parent / args.test_subdir
+    test_dir = particle_dir / args.test_subdir
     test_dir.mkdir(exist_ok=True)
 
     # --- Preflight: confirm particle files exist ---
@@ -322,11 +320,11 @@ def main():
     dust_dt = timings.get("dust", (0.0, 0))[0]
     nodust_dt = timings.get("nodust", (0.0, 0))[0]
     per_halo = dust_dt * photon_scale + nodust_dt
-    full_sweep = per_halo * N_RUNS
+    full_sweep = per_halo * N_HALOS
     print()
     print(f"Production projection (face-on, {PROD_PHOTONS:.0e} photons, dust+nodust):")
     print(f"  per halo:   ~{per_halo:7.0f} s  = ~{per_halo/60:.1f} min")
-    print(f"  {N_RUNS} runs:   ~{full_sweep:7.0f} s  = ~{full_sweep/60:.1f} min "
+    print(f"  {N_HALOS} halos:   ~{full_sweep:7.0f} s  = ~{full_sweep/60:.1f} min "
           f"= ~{full_sweep/3600:.2f} hr")
     print(f"  (dust photon scale: {photon_scale:.0f}x; nodust projected flat)")
 

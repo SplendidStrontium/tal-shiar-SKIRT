@@ -1,20 +1,18 @@
 """
 make_particles.py — Tal Shiar SKIRT Pipeline, Step 1
-(adapted for "Enterprise" sub-project)
 
 Takes a Romulus zoom-in snapshot (.tipsy) and extracts star and gas particle
 data into numpy arrays formatted for SKIRT radiative transfer.
 
 What this script does:
     1. Loads the simulation snapshot with pynbody
-    2. Selects the target halo from the amiga catalog (full zoom volume may contain many halos)
-    3. Centers the pynbody snapshot using the shrinking-sphere method on all families (DM, gas, stars)
-    4. Reorients the snapshot so the disk's angular momentum vector aligns
+    2. Centers the pynbody snapshot on the stellar center-of-mass
+    3. Reorients the snapshot so the disk's angular momentum vector aligns
        with +z (face-on in the x-y plane). This makes downstream inclination
        angles physically meaningful: cos(i) = |v_hat . z_hat|.
-    5. Converts all quantities to physical units (pc, Msol, km/s, yr)
-    6. Applies a spatial cut to remove outlier particles
-    7. Saves particle arrays as .npy files for SKIRT
+    4. Converts all quantities to physical units (pc, Msol, km/s, yr)
+    5. Applies a spatial cut to remove outlier particles
+    6. Saves particle arrays as .npy files for SKIRT
 
 Orientation correction (new in this version):
     The galaxy disk is not guaranteed to be aligned with the simulation's x-y
@@ -40,8 +38,9 @@ What this script does NOT do (yet):
           already models the HII region + birth cloud, so this is a second-order
           correction for future work.
 
-Adapted from NIHAO-SKIRT-Pipeline/bin/makeParticles.py          
+Adapted from NIHAO-SKIRT-Pipeline/bin/makeParticles.py
 Key differences from NIHAO version:
+    - No halo catalogue lookup (Romulus data is already zoomed in on one halo)
     - Uses pynbody-native centering on the stellar center-of-mass
     - Applies orientation correction via pynbody.analysis.angmom.faceon before extraction
     - Field mapping: uses 'smooth' (not 'eps'), 'mass' (no 'massform'),
@@ -54,7 +53,6 @@ import numpy as np
 import os
 import argparse
 import warnings
-import csv
 from timeit import default_timer as timer
 
 
@@ -67,11 +65,6 @@ from timeit import default_timer as timer
 # - MIN_COLD_GAS_MASS / MIN_YOUNG_STAR_MASS: below these thresholds, fall back
 #   to the next tracer. Romulus galaxies with strong BH feedback may have blown
 #   out their cold gas, so the fallback is important.
-# NOTE: COLD_GAS_TEMP_K here is the ORIENTATION-TRACER selection cut, NOT the
-# SKIRT dust temperature threshold (8e3 K in the enterprise ski files). The
-# tracer just needs enough disk-tracing gas to define L_hat; cutting at 8e3 K
-# here would starve the tracer in the feedback-heated BH6/BH8 runs and trip
-# the fallback cascade for no benefit.
 COLD_GAS_TEMP_K = 3e4
 YOUNG_STAR_AGE_YR = 1e9
 TRACER_RADIUS_KPC = 10.0
@@ -111,52 +104,41 @@ def load_snapshot(filepath):
     data = pynbody.load(filepath)
     data.physical_units()
 
-    # print some basic info (full volume — halo-scoped numbers come later)
+    # print some basic info
     print(f"  Star particles: {len(data.star)}")
     print(f"  Gas particles:  {len(data.gas)}")
-    print(f"  DM particles:   {len(data.dm)}")
+
+    # flag BH candidates
+    tform = data.star['tform']
+    bh = tform < 0
+    print(f"{bh.sum()} BH candidates")
+    print("masses (Msol):", data.star['mass'].in_units('Msol')[bh])
+    print("radii (kpc):", np.sqrt((data.star['pos'].in_units('kpc')[bh]**2).sum(axis=1)))
 
     return data
 
-def select_halo(data, halo_id):
+
+def center_snapshot(data):
     """
-    Return the halo subsnap for halo_id from the amiga catalog.
+    Center the pynbody snapshot on the stellar center of mass.
 
-    Enterprise snapshots are full zoom volumes with many halos; everything
-    downstream (centering, orientation, extraction) operates on this subsnap.
-    Transformations applied to it (center, faceon) propagate to the base
-    snapshot, so the frame stays consistent across all particle families.
-    """
-    print(f"Selecting halo {halo_id} from amiga catalog...")
-    halo = data.halos()[halo_id]
+    This is done on the pynbody SimSnap itself (not on extracted arrays) so
+    that pynbody.analysis.angmom.faceon() downstream computes angular momentum in
+    a frame where the galaxy is at the origin. faceon() assumes this.
 
-    tform = np.asarray(halo.star['tform'])
-    n_bh = int((tform < 0).sum())
-    print(f"  Halo {halo_id}: {int((tform > 0).sum())} stars, "
-          f"{len(halo.gas)} gas, {len(halo.dm)} DM")
-    if n_bh:
-        mbh = np.asarray(halo.star['mass'].in_units('Msol')[tform < 0])
-        print(f"  {n_bh} BH particle(s), masses (Msol): {mbh}")
-    else:
-        print(f"  No BH particles (tform < 0) in halo {halo_id}.")
-    return halo
-
-
-def center_snapshot(halo):
-    """
-    We center on the FULL halo (DM included): the dark matter defines the
-    potential well, making shrinking-sphere more robust than baryons-only,
-    especially in the feedback-heated BH6/BH8 variants where gas can be
-    lopsided. The COM/median verification below still uses stars, since
-    stars trace the galaxy we actually care about landing at the origin.
+    We use stars (not gas) because the stellar distribution better traces
+    the galaxy center, especially in dwarfs where gas can be offset by feedback.
     """
     print("Centering snapshot on stellar density peak (shrinking-sphere)...")
 
-    pynbody.analysis.halo.center(halo, mode='ssc', move_all=True)
+    # Shrinking-sphere centering locks onto the main galaxy's densest peak,
+    # ignoring satellites and extended halo stars. move_all=True ensures the
+    # translation is applied to the parent snapshot, not just the stellar SubSnap.
+    pynbody.analysis.halo.center(data.s, mode='ssc', move_all=True)
 
     # Verify centering propagated correctly
-    com_check = (halo.s['mass'].reshape(-1,1) * halo.s['pos']).sum(axis=0) / halo.s['mass'].sum()
-    median_check = np.median(halo.s['pos'], axis=0)
+    com_check = (data.s['mass'].reshape(-1,1) * data.s['pos']).sum(axis=0) / data.s['mass'].sum()
+    median_check = np.median(data.s['pos'], axis=0)
     print(f"  Post-centering stellar COM:    [{com_check[0]:+.3f}, {com_check[1]:+.3f}, {com_check[2]:+.3f}] kpc")
     print(f"  Post-centering stellar median: [{median_check[0]:+.3f}, {median_check[1]:+.3f}, {median_check[2]:+.3f}] kpc")
     if np.linalg.norm(median_check) > 0.5:
@@ -165,7 +147,7 @@ def center_snapshot(halo):
     print("  Snapshot centered at origin.")
 
 
-def select_orientation_tracer(halo):
+def select_orientation_tracer(data):
     """
     Pick the best tracer for defining the disk plane.
 
@@ -181,37 +163,37 @@ def select_orientation_tracer(halo):
     print("Selecting orientation tracer...")
 
     # Compute radius in kpc for each gas/star particle
-    gas_r_kpc = np.sqrt((halo.gas['pos'].in_units('kpc') ** 2).sum(axis=1))
-    star_r_kpc = np.sqrt((halo.star['pos'].in_units('kpc') ** 2).sum(axis=1))
+    gas_r_kpc = np.sqrt((data.gas['pos'].in_units('kpc') ** 2).sum(axis=1))
+    star_r_kpc = np.sqrt((data.star['pos'].in_units('kpc') ** 2).sum(axis=1))
 
     # Exclude BH particles (tform < 0) from any star-based tracer.
-    is_real_star = np.asarray(halo.star['tform']) > 0
+    is_real_star = np.asarray(data.star['tform']) >= 0
 
     # --- Attempt 1: cold gas ---
-    gas_temp_k = halo.gas['temp'].view(np.ndarray)
+    gas_temp_k = data.gas['temp'].view(np.ndarray)
     cold_gas_mask = (gas_temp_k < COLD_GAS_TEMP_K) & (gas_r_kpc < TRACER_RADIUS_KPC)
-    cold_gas_mass = float(halo.gas['mass'].in_units('Msol')[cold_gas_mask].sum())
+    cold_gas_mass = float(data.gas['mass'].in_units('Msol')[cold_gas_mask].sum())
     print(f"  Cold gas (T<{COLD_GAS_TEMP_K:.0e}K, r<{TRACER_RADIUS_KPC}kpc): "
           f"{cold_gas_mask.sum()} particles, {cold_gas_mass:.2e} Msol")
 
     if cold_gas_mass > MIN_COLD_GAS_MASS:
         print(f"  -> Using cold gas as orientation tracer.")
-        return halo.gas[cold_gas_mask], 'cold_gas'
+        return data.gas[cold_gas_mask], 'cold_gas'
 
     # --- Attempt 2: young stars ---
-    star_age_yr = halo.star['age'].in_units('yr').view(np.ndarray)
+    star_age_yr = data.star['age'].in_units('yr').view(np.ndarray)
     young_star_mask = (star_age_yr < YOUNG_STAR_AGE_YR) & (star_r_kpc < TRACER_RADIUS_KPC) & is_real_star
-    young_star_mass = float(halo.star['mass'].in_units('Msol')[young_star_mask].sum())
+    young_star_mass = float(data.star['mass'].in_units('Msol')[young_star_mask].sum())
     print(f"  Young stars (age<{YOUNG_STAR_AGE_YR:.0e}yr, r<{TRACER_RADIUS_KPC}kpc): "
           f"{young_star_mask.sum()} particles, {young_star_mass:.2e} Msol")
 
     if young_star_mass > MIN_YOUNG_STAR_MASS:
         print(f"  -> Cold gas too sparse. Using young stars as orientation tracer.")
-        return halo.star[young_star_mask], 'young_stars'
+        return data.star[young_star_mask], 'young_stars'
 
     # --- Attempt 3: all stars (warn) ---
     all_star_mask = (star_r_kpc < TRACER_RADIUS_KPC) & is_real_star
-    all_star_mass = float(halo.star['mass'].in_units('Msol')[all_star_mask].sum())
+    all_star_mass = float(data.star['mass'].in_units('Msol')[all_star_mask].sum())
     warnings.warn(
         f"Neither cold gas ({cold_gas_mass:.2e} Msol) nor young stars "
         f"({young_star_mass:.2e} Msol) meet the mass threshold for reliable "
@@ -221,10 +203,10 @@ def select_orientation_tracer(halo):
         f"on this galaxy to assess whether it has a real disk.",
         RuntimeWarning,
     )
-    return halo.star[all_star_mask], 'all_stars_fallback'
+    return data.star[all_star_mask], 'all_stars_fallback'
 
 
-def orient_faceon(halo):
+def orient_faceon(data):
     """
     Rotate the snapshot so the tracer's angular momentum points along +z.
 
@@ -238,7 +220,7 @@ def orient_faceon(halo):
     Returns:
         tracer_name: string identifying which tracer was used (for provenance)
     """
-    tracer, tracer_name = select_orientation_tracer(halo)
+    tracer, tracer_name = select_orientation_tracer(data)
     print(f"Applying pynbody.analysis.angmom.faceon using tracer='{tracer_name}'...")
 
     # faceon rotates the parent snapshot in place. We pass move_all=True
@@ -249,7 +231,7 @@ def orient_faceon(halo):
     return tracer_name
 
 
-def extract_star_properties(halo):
+def extract_star_properties(data):
     """
     Pull out all star particle properties that SKIRT needs,
     converting to physical units.
@@ -270,23 +252,23 @@ def extract_star_properties(halo):
 
     # Romulus (GASOLINE/ChaNGa) stores BHs in the star family with tform < 0.
     # They are not stellar populations: exclude before SED assignment / mass counting.
-    is_star = np.asarray(halo.star['tform']) >= 0
+    is_star = np.asarray(data.star['tform']) >= 0
     n_bh = int((~is_star).sum())
     if n_bh > 0:
-        bh_mass = float(halo.star['mass'].in_units('Msol')[~is_star].sum())
+        bh_mass = float(data.star['mass'].in_units('Msol')[~is_star].sum())
         print(f"  Excluding {n_bh} BH particle(s), M_BH_tot = {bh_mass:.2e} Msol")
 
     stars = {
-        'x_pos':  np.float32(halo.star['pos'].in_units('pc')[is_star, 0]),
-        'y_pos':  np.float32(halo.star['pos'].in_units('pc')[is_star, 1]),
-        'z_pos':  np.float32(halo.star['pos'].in_units('pc')[is_star, 2]),
-        'x_vel':  np.float32(halo.star['vel'].in_units('km s**-1')[is_star, 0]),
-        'y_vel':  np.float32(halo.star['vel'].in_units('km s**-1')[is_star, 1]),
-        'z_vel':  np.float32(halo.star['vel'].in_units('km s**-1')[is_star, 2]),
-        'mass':   np.float32(halo.star['mass'].in_units('Msol')[is_star]),
-        'metals': np.float32(halo.star['metals'][is_star]),
-        'age':    np.float32(halo.star['age'].in_units('yr')[is_star]),
-        'smooth': 2 * np.float32(halo.star['smooth'].in_units('pc')[is_star]),  # 2x smoothing length, following NIHAO convention
+        'x_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 0]),
+        'y_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 1]),
+        'z_pos':  np.float32(data.star['pos'].in_units('pc')[is_star, 2]),
+        'x_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 0]),
+        'y_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 1]),
+        'z_vel':  np.float32(data.star['vel'].in_units('km s**-1')[is_star, 2]),
+        'mass':   np.float32(data.star['mass'].in_units('Msol')[is_star]),
+        'metals': np.float32(data.star['metals'][is_star]),
+        'age':    np.float32(data.star['age'].in_units('yr')[is_star]),
+        'smooth': 2 * np.float32(data.star['smooth'].in_units('pc')[is_star]),  # 2x smoothing length, following NIHAO convention
     }
 
     print(f"  Mass range: {stars['mass'].min():.2e} - {stars['mass'].max():.2e} Msol")
@@ -295,7 +277,7 @@ def extract_star_properties(halo):
     return stars
 
 
-def extract_gas_properties(halo):
+def extract_gas_properties(data):
     """
     Pull out all gas/dust particle properties that SKIRT needs,
     converting to physical units.
@@ -315,14 +297,14 @@ def extract_gas_properties(halo):
     print("Extracting gas properties...")
 
     gas = {
-        'x_pos':   np.float32(halo.gas['pos'].in_units('pc')[:, 0]),
-        'y_pos':   np.float32(halo.gas['pos'].in_units('pc')[:, 1]),
-        'z_pos':   np.float32(halo.gas['pos'].in_units('pc')[:, 2]),
-        'mass':    np.float32(halo.gas['mass'].in_units('Msol')),
-        'metals':  np.float32(halo.gas['metals']),
-        'smooth':  2 * np.float32(halo.gas['smooth'].in_units('pc')),  # 2x smoothing length
-        'temp':    np.float32(halo.gas['temp']),
-        'density': np.float32(halo.gas['rho'].in_units('Msol pc**-3')),
+        'x_pos':   np.float32(data.gas['pos'].in_units('pc')[:, 0]),
+        'y_pos':   np.float32(data.gas['pos'].in_units('pc')[:, 1]),
+        'z_pos':   np.float32(data.gas['pos'].in_units('pc')[:, 2]),
+        'mass':    np.float32(data.gas['mass'].in_units('Msol')),
+        'metals':  np.float32(data.gas['metals']),
+        'smooth':  2 * np.float32(data.gas['smooth'].in_units('pc')),  # 2x smoothing length
+        'temp':    np.float32(data.gas['temp']),
+        'density': np.float32(data.gas['rho'].in_units('Msol pc**-3')),
     }
 
     print(f"  Mass range: {gas['mass'].min():.2e} - {gas['mass'].max():.2e} Msol")
@@ -578,63 +560,6 @@ def write_skirt_text_files(stars, gas, output_dir):
     print(f"  gas.txt         — {len(gas['x_pos'])} particles, "
           f"M_tot = {gas['mass'].sum():.2e} Msol")
 
-def write_diagnostics(halo, stars, gas, output_dir, halo_id, snapshot_path):
-    """
-    One-row diagnostics.csv per run, computed from the POST-CUT particle
-    arrays (i.e. what SKIRT actually receives), plus halo-scope BH/DM info.
-    Later: glob the 20 files and pd.concat for the presentation table.
-    """
-    # -- mass-weighted age statistics (real stars only; BHs already excluded)
-    m, age = stars['mass'], stars['age']
-    mean_age = float((m * age).sum() / m.sum())
-    order = np.argsort(age)
-    cum = np.cumsum(m[order])
-    t50 = float(age[order][np.searchsorted(cum, 0.5 * cum[-1])])
-
-    # -- 3D half-mass radius
-    r = np.sqrt(stars['x_pos']**2 + stars['y_pos']**2 + stars['z_pos']**2)
-    order = np.argsort(r)
-    cum = np.cumsum(m[order])
-    r_half_pc = float(r[order][np.searchsorted(cum, 0.5 * cum[-1])])
-
-    # -- SFR from recent formation mass (current mass as proxy, as elsewhere)
-    sfr25 = float(m[age < 25e6].sum() / 25e6)
-    sfr100 = float(m[age < 1e8].sum() / 1e8)
-
-    # -- dust-relevant gas phase split at the SKIRT threshold
-    m_gas_cold_8e3 = float(gas['mass'][gas['temp'] < 8e3].sum())
-
-    # -- halo-scope quantities (pre-cut)
-    tform = np.asarray(halo.star['tform'])
-    n_bh = int((tform < 0).sum())
-    mbh_tot = float(halo.star['mass'].in_units('Msol')[tform < 0].sum()) if n_bh else 0.0
-
-    diag = dict(
-        snapshot=os.path.basename(snapshot_path), halo_id=halo_id,
-        n_star=len(m), n_gas=len(gas['mass']), n_dm=len(halo.dm),
-        mstar=float(m.sum()), mgas=float(gas['mass'].sum()),
-        n_bh=n_bh, mbh_tot=mbh_tot,
-        mean_age_gyr=mean_age / 1e9, t50_gyr=t50 / 1e9,
-        r_half_kpc=r_half_pc / 1e3,
-        sfr_25myr=sfr25, sfr_100myr=sfr100,
-        m_gas_cold_8e3=m_gas_cold_8e3,
-        f_gas_cold_8e3=m_gas_cold_8e3 / float(gas['mass'].sum())
-                       if gas['mass'].sum() > 0 else 0.0,
-    )
-
-    path = os.path.join(output_dir, 'diagnostics.csv')
-    with open(path, 'w', newline='') as f:
-        w = csv.DictWriter(f, fieldnames=list(diag.keys()))
-        w.writeheader()
-        w.writerow(diag)
-
-    print(f"\nDiagnostics -> {path}")
-    print(f"  M* = {diag['mstar']:.2e}  Mgas = {diag['mgas']:.2e}  "
-          f"n_BH = {n_bh}  M_BH = {mbh_tot:.2e}")
-    print(f"  <age> = {diag['mean_age_gyr']:.2f} Gyr  t50 = {diag['t50_gyr']:.2f} Gyr  "
-          f"r_half = {diag['r_half_kpc']:.2f} kpc")
-    print(f"  SFR(25 Myr) = {sfr25:.3f}  SFR(100 Myr) = {sfr100:.3f} Msol/yr  "
-          f"f_cold(8e3 K) = {diag['f_gas_cold_8e3']:.1%}")
 
 # ============================================================================
 # Main
@@ -653,18 +578,13 @@ if __name__ == '__main__':
     parser.add_argument("--skip-orient", action='store_true',
                         help="Skip orientation correction (for debugging only; "
                              "downstream inclination angles will be meaningless)")
-    parser.add_argument("--halo", type=int, default=1,
-                        help="amiga halo ID to extract (default: 1, the major halo)")
     args = parser.parse_args()
 
     # Step 1: Load the simulation snapshot
     data = load_snapshot(args.snapshot)
 
-    # Step 2: Select the target halo (enterprise: full zoom volume)
-    halo = select_halo(data, args.halo)
-
-    # Step 2.5: Center on the full halo, DM included (needed before faceon)
-    center_snapshot(halo)
+    # Step 2: Center the pynbody snapshot (needed before faceon)
+    center_snapshot(data)
 
     # Step 3: Orient the disk face-on (L_hat -> +z_hat)
     if args.skip_orient:
@@ -672,11 +592,11 @@ if __name__ == '__main__':
                       "angles will NOT be physically meaningful.", RuntimeWarning)
         tracer_name = 'SKIPPED'
     else:
-        tracer_name = orient_faceon(halo)
+        tracer_name = orient_faceon(data)
 
     # Step 4: Extract and convert units (positions now in disk-aligned frame)
-    stars = extract_star_properties(halo)
-    gas = extract_gas_properties(halo)
+    stars = extract_star_properties(data)
+    gas = extract_gas_properties(data)
 
     # Step 5: Spatial cut (optional)
     if args.radius is not None:
@@ -687,9 +607,6 @@ if __name__ == '__main__':
 
     # Step 7: Write .txt files for SKIRT to ingest directly
     write_skirt_text_files(stars, gas, args.output)
-
-    # Step 8: Per-run diagnostics for the cross-variant comparison table
-    write_diagnostics(halo, stars, gas, args.output, args.halo, args.snapshot)
 
     end = timer()
     print(f"\nDone in {end - start:.1f} seconds.")

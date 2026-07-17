@@ -1,0 +1,71 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Enterprise SKIRT: r618_BH8, no-dust, NoMedium, UV-NIR, 2 inclination(s), Kroupa, Tdust<8000K -->
+<skirt-simulation-hierarchy type="MonteCarloSimulation" format="9" producer="Enterprise pipeline">
+  <MonteCarloSimulation userLevel="Regular" simulationMode="NoMedium" numPackets="5e7">
+    <random type="Random">
+      <Random seed="0"/>
+    </random>
+    <units type="Units">
+      <ExtragalacticUnits fluxOutputStyle="Frequency"/>
+    </units>
+    <cosmology type="Cosmology">
+      <LocalUniverseCosmology/>
+    </cosmology>
+    <sourceSystem type="SourceSystem">
+      <SourceSystem minWavelength="0.1 micron" maxWavelength="2.5 micron" sourceBias="0.5">
+        <sources type="Source">
+          <ParticleSource filename="stars.txt" importVelocity="true" importVelocityDispersion="false" useColumns="" sourceWeight="1" wavelengthBias="0.5">
+            <smoothingKernel type="SmoothingKernel">
+              <CubicSplineSmoothingKernel/>
+            </smoothingKernel>
+            <sedFamily type="SEDFamily">
+              <FSPSSEDFamily imf="Kroupa"/>
+            </sedFamily>
+            <wavelengthBiasDistribution type="WavelengthDistribution">
+              <LogWavelengthDistribution minWavelength="0.1 micron" maxWavelength="2.5 micron"/>
+            </wavelengthBiasDistribution>
+          </ParticleSource>
+          <ParticleSource filename="youngStars.txt" importVelocity="true" importVelocityDispersion="false" useColumns="" sourceWeight="1" wavelengthBias="0.5">
+            <smoothingKernel type="SmoothingKernel">
+              <CubicSplineSmoothingKernel/>
+            </smoothingKernel>
+            <sedFamily type="SEDFamily">
+              <MappingsSEDFamily/>
+            </sedFamily>
+            <wavelengthBiasDistribution type="WavelengthDistribution">
+              <LogWavelengthDistribution minWavelength="0.1 micron" maxWavelength="2.5 micron"/>
+            </wavelengthBiasDistribution>
+          </ParticleSource>
+        </sources>
+      </SourceSystem>
+    </sourceSystem>
+
+    <instrumentSystem type="InstrumentSystem">
+      <InstrumentSystem>
+        <defaultWavelengthGrid type="WavelengthGrid">
+          <LogWavelengthGrid minWavelength="0.1 micron" maxWavelength="2.5 micron" numWavelengths="250"/>
+        </defaultWavelengthGrid>
+        <instruments type="Instrument">
+          <FullInstrument instrumentName="i00_00p00deg" distance="100 Mpc" inclination="0.0000 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <SEDInstrument instrumentName="sed_i00_00p00deg" distance="100 Mpc" inclination="0.0000 deg" azimuth="0 deg" roll="0 deg" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false"/>
+          <FullInstrument instrumentName="i01_90p00deg" distance="100 Mpc" inclination="90.0000 deg" azimuth="0 deg" roll="0 deg" fieldOfViewX="70000 pc" numPixelsX="500" centerX="0 pc" fieldOfViewY="70000 pc" numPixelsY="500" centerY="0 pc" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false">
+            <wavelengthGrid type="WavelengthGrid">
+              <PredefinedBandWavelengthGrid includeGALEX="true" includeSDSS="true" include2MASS="true" includeWISE="false" includeHERSCHEL="false"/>
+            </wavelengthGrid>
+          </FullInstrument>
+          <SEDInstrument instrumentName="sed_i01_90p00deg" distance="100 Mpc" inclination="90.0000 deg" azimuth="0 deg" roll="0 deg" recordComponents="false" numScatteringLevels="0" recordPolarization="false" recordStatistics="false"/>
+        </instruments>
+      </InstrumentSystem>
+    </instrumentSystem>
+    <probeSystem type="ProbeSystem">
+      <ProbeSystem>
+        <probes type="Probe">
+        </probes>
+      </ProbeSystem>
+    </probeSystem>
+  </MonteCarloSimulation>
+</skirt-simulation-hierarchy>
