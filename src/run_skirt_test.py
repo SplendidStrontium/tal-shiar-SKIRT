@@ -23,7 +23,7 @@ Why a separate driver instead of re-running generate_ski.py:
       without touching generate_ski.py
 
 Usage:
-    # Default: r142, face-on, 1e6 photons, 256 pixels
+    # Default: galaxy..., face-on, 1e6 photons, 256 pixels
     python run_skirt_test.py
 
     # A different halo
@@ -65,7 +65,7 @@ N_RUNS = 20             # full dust+nodust sweep is 2 x N_RUNS SKIRT runs
 DEFAULT_SKIRT = "/mnt/data0/jillian/SKIRT/release/SKIRT/main/skirt"
 
 
-def rewrite_ski_for_test(src_path, dst_path, num_photons, num_pixels, keep_incs_deg):
+def rewrite_ski_for_test(src_path, dst_path, num_photons, num_pixels, keep_incs_deg, max_level=None):
     """
     Rewrite a production .ski file for test running:
       - numPackets attribute on MonteCarloSimulation -> num_photons
@@ -83,6 +83,10 @@ def rewrite_ski_for_test(src_path, dst_path, num_photons, num_pixels, keep_incs_
     # 2. Swap numPixelsX / numPixelsY everywhere
     text = re.sub(r'numPixelsX="[^"]+"', f'numPixelsX="{num_pixels}"', text)
     text = re.sub(r'numPixelsY="[^"]+"', f'numPixelsY="{num_pixels}"', text)
+
+    # after the numPixels substitutions:
+    if max_level is not None:
+        text = re.sub(r'maxLevel="[^"]+"', f'maxLevel="{max_level}"', text)
 
     # 3. Filter FullInstrument blocks by inclination
     keep_set = {round(x, 2) for x in keep_incs_deg}
@@ -189,7 +193,7 @@ def main():
                         help="Run to test (e.g. r741, r488_BH8)")
     parser.add_argument("--particle-dir", default=None,
                         help="Dir with stars.txt, youngStars.txt, gas.txt "
-                             "(default: /mnt/data0/pkrsnak/romulus/{galaxy})")
+                             "(default: /mnt/data0/pkrsnak/romulus/enterprise/{galaxy})")
     parser.add_argument("--ski-dir", default=None,
                         help=f"Directory containing {{galaxy}}_dust.ski / "
                              f"{{galaxy}}_nodust.ski (default: {DEFAULT_SKI_DIR})")
@@ -207,6 +211,8 @@ def main():
                         help="Only run the no-dust ski file")
     parser.add_argument("--skip-nodust", action="store_true",
                         help="Only run the dust ski file")
+    parser.add_argument("--max-level", type=int, default=None,
+                        help="Maximum level for test (default: None)")
     args = parser.parse_args()
 
     galaxy = args.galaxy
@@ -271,9 +277,9 @@ def main():
 
     print("\nRewriting ski files for test...")
     n_dust = rewrite_ski_for_test(dust_src, dust_test,
-                                   args.photons, args.pixels, args.inclinations)
+                                   args.photons, args.pixels, args.inclinations, args.max_level)
     n_nodust = rewrite_ski_for_test(nodust_src, nodust_test,
-                                     args.photons, args.pixels, args.inclinations)
+                                     args.photons, args.pixels, args.inclinations, args.max_level)
     print(f"  {dust_test.name}:   {n_dust} instruments")
     print(f"  {nodust_test.name}: {n_nodust} instruments")
 

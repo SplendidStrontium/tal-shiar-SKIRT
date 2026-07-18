@@ -57,7 +57,7 @@
         <grid type="SpatialGrid">
           <PolicyTreeSpatialGrid minX="-35000 pc" maxX="35000 pc" minY="-35000 pc" maxY="35000 pc" minZ="-35000 pc" maxZ="35000 pc" treeType="OctTree">
             <policy type="TreePolicy">
-              <DensityTreePolicy minLevel="6" maxLevel="9" maxDustFraction="1e-6" maxDustOpticalDepth="0" wavelength="0.55 micron" maxDustDensityDispersion="0" maxElectronFraction="1e-6" maxGasFraction="1e-6"/>
+              <DensityTreePolicy minLevel="6" maxLevel="11" maxDustFraction="1e-6" maxDustOpticalDepth="0" wavelength="0.55 micron" maxDustDensityDispersion="0" maxElectronFraction="1e-6" maxGasFraction="1e-6"/>
             </policy>
           </PolicyTreeSpatialGrid>
         </grid>
