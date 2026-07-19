@@ -84,14 +84,15 @@ def channel_image(cube, wav, lo, hi):
     return np.nanmean(cube[sel], axis=0)
 
 
-def normalize(img, pct):
-    """Scale image so the pct-th percentile of positive pixels maps to 1."""
+def channel_scale(img, pct):
+    """The pct-th percentile of positive pixels -- the number that maps to 1."""
     pos = img[np.isfinite(img) & (img > 0)]
-    if pos.size == 0:
-        return np.zeros_like(img)
-    scale = np.percentile(pos, pct)
-    return np.clip(np.nan_to_num(img), 0, None) / max(scale, 1e-30)
+    return float(np.percentile(pos, pct)) if pos.size else 1.0
 
+
+def normalize(img, scale):
+    """Apply a fixed scale (from this image or a reference image)."""
+    return np.clip(np.nan_to_num(img), 0, None) / max(scale, 1e-30)
 
 def center_crop(img, frac):
     """Keep the central frac of the frame (SKIRT instruments are galaxy-centered)."""
@@ -102,13 +103,16 @@ def center_crop(img, frac):
     return img[ny // 2 - hy: ny // 2 + hy, nx // 2 - hx: nx // 2 + hx]
 
 
-def make_one(path, outdir, windows, Q, stretch, pct, minimum, crop, upscale):
+def make_one(path, outdir, windows, Q, stretch, pct, minimum, crop, upscale, scales=None):
     cube, wav = load_cube(path)
 
-    r = normalize(center_crop(channel_image(cube, wav, *windows["R"]), crop), pct)
-    g = normalize(center_crop(channel_image(cube, wav, *windows["G"]), crop), pct)
-    b = normalize(center_crop(channel_image(cube, wav, *windows["B"]), crop), pct)
-
+    chans = {k: center_crop(channel_image(cube, wav, *windows[k]), crop)
+             for k in ("R", "G", "B")}
+    if scales is None:
+        scales = {k: channel_scale(chans[k], pct) for k in chans}   # old per-image behavior
+    r = normalize(chans["R"], scales["R"])
+    g = normalize(chans["G"], scales["G"])
+    b = normalize(chans["B"], scales["B"])
     rgb = make_lupton_rgb(r, g, b, Q=Q, stretch=stretch, minimum=minimum)
 
     out = outdir / (Path(path).stem + "_rgb.png")
@@ -146,16 +150,29 @@ def main():
                help="central fraction of the frame to keep (1.0 = no crop)")
     p.add_argument("--upscale", type=int, default=3,
                help="integer upscale factor for the output PNG")
+    p.add_argument("--ref", default=None,
+                   help="cube whose channel scales are applied to ALL images "
+                        "(shared normalization; omit for per-image behavior)")
     args = p.parse_args()
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
+    scales = None
+    if args.ref:
+        rcube, rwav = load_cube(args.ref)
+        scales = {k: channel_scale(
+                      center_crop(channel_image(rcube, rwav, *DEFAULT_WINDOWS[k]),
+                                  args.crop), args.pct)
+                  for k in ("R", "G", "B")}
+        print(f"Reference {Path(args.ref).name}: scales "
+              f"R={scales['R']:.4g} G={scales['G']:.4g} B={scales['B']:.4g}")
+
     failures = 0
     for path in args.cubes:
         try:
             make_one(path, outdir, DEFAULT_WINDOWS,
-                     args.Q, args.stretch, args.pct, args.minimum, args.crop, args.upscale)
+                     args.Q, args.stretch, args.pct, args.minimum, args.crop, args.upscale, scales)
         except Exception as e:
             failures += 1
             print(f"  FAILED {path}: {e}", file=sys.stderr)
