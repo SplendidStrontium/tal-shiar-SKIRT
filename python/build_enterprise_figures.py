@@ -312,7 +312,7 @@ def fig_dust_reddening_single(df, mstar_fam, outdir, pair_idx, stem):
              "\u201cdust \u00d7N\u201d = change in the cold-gas dust reservoir",
              ha="center", va="bottom", fontsize=9.5, color=GREY)
     fig.subplots_adjust(top=0.80, bottom=0.20, left=0.17, right=0.90)
-    fig.subplots_adjust(top=0.80, bottom=0.16, left=0.17, right=0.90)
+
     save(fig, outdir, stem)
 
 
@@ -390,7 +390,7 @@ def fig_bh_selfregulation(mstar_fam, outdir):
     ylo, yhi = vals.min() - pad, vals.max() + pad
     min_sep = 0.06 * (yhi - ylo)
 
-    fig, ax = plt.subplots(figsize=(6.8, 5.4))
+    fig, ax = plt.subplots(figsize=(6.5, 5.4))
     # temporarily point PAIRS[1] machinery at the BH-mass pivot,
     # with growth-factor edge labels
 
@@ -398,22 +398,73 @@ def fig_bh_selfregulation(mstar_fam, outdir):
                       seg_annot=piv, annot_fontsize=10,
                       annot_prefix="grew")
     ax.set_ylim(ylo, yhi)
-    ax.set_xlim(-0.20, 2.55)
-    ax.set_title("feedback efficiency 0.05 \u2192 0.005\n"
-                 f"\u27e8\u0394 log\u2081\u2080 M\u2099\u2095\u27e9 = "
-                 f"{delta.mean():+.2f} \u00b1 {delta.std(ddof=1):.2f} dex "
-                 f"(\u2248\u00d7{10**delta.mean():.0f})", fontsize=12)
-    ax.set_ylabel("log\u2081\u2080  M\u2099\u2095 / M\u2299   "
-                  "(most massive BH, main halo)")
+    ax.set_xlim(-0.20, 1.65)
+    ax.set_title("feedback efficiency 0.05 \u2192 0.005\n", fontsize=12)
+    """
+    f"\u27e8\u0394 log\u2081\u2080 M\u2099\u2095\u27e9 = ",
+    f"{delta.mean():+.2f} \u00b1 {delta.std(ddof=1):.2f} dex "
+    f"(\u2248\u00d7{10**delta.mean():.0f})"
+    """
+    ax.set_ylabel(r"$\log_{10}\; M_{\mathrm{BH}} / M_\odot$   (most massive BH, main halo)")
+    ## main halo
     fig.suptitle("Weaker feedback \u2192 bigger black holes",
-                 fontsize=15, y=0.99)
+                 fontsize=16, y=0.95)
     fig.text(0.5, 0.015,
-             "self-regulation: BHs grow until their feedback compensates "
-             "\u00b7 \u201cgrew \u00d7N\u201d = M\u2099\u2095 ratio BH8/BH6",
-             ha="center", va="bottom", fontsize=9.5, color=GREY)
-    fig.subplots_adjust(top=0.80, bottom=0.14, left=0.15, right=0.90)
+         r"“grew ×N” = $M_{\mathrm{BH}}$ ratio BH8/BH6",
+         ha="center", va="bottom", fontsize=9.5, color=GREY)
+    ## self-regulation: BHs grow until their feedback compensates
+    fig.subplots_adjust(top=0.80, bottom=0.14, left=0.15, right=0.97)
     save(fig, outdir, "fig_enterprise_bh_selfregulation")
 
+# ---------------------------------------------------------------------------
+# Figure 5: why color doesn't budge, show effect on stars vs. dust
+# ---------------------------------------------------------------------------
+
+def fig_decomposition(df, mstar_fam, outdir):
+    """Mechanism summary: each twin-pair color change split into its
+    intrinsic (stellar) and dust contributions.
+      solid bar   = intrinsic = \u0394(nodust B\u2212K)
+      hatched bar = dust      = \u0394(reddening)
+      black tick  = total     = \u0394(dust B\u2212K) = solid + hatched
+    The feedback panel is the payoff: solid bars up, hatched bars
+    down, ticks near zero -- the cancellation made visible."""
+    p_dust = face_on(df, "dust")
+    p_nod = face_on(df, "nodust")
+    shades, order = family_colors(mstar_fam)
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.8, 4.9), sharey=True)
+    w = 0.32
+    for ax, ((v0, v1), knob) in zip(axes, PAIRS):
+        d_tot = (p_dust[v1] - p_dust[v0]).loc[FAMILIES].to_numpy(dtype=float)
+        d_int = (p_nod[v1] - p_nod[v0]).loc[FAMILIES].to_numpy(dtype=float)
+        d_dust = d_tot - d_int
+        xs = np.arange(len(FAMILIES))
+        for x, f, di, dd, dt in zip(xs, FAMILIES, d_int, d_dust, d_tot):
+            ax.bar(x - w / 2, di, width=w, color=shades[f], zorder=3)
+            ax.bar(x + w / 2, dd, width=w, color=shades[f], alpha=0.45,
+                   hatch="//", edgecolor=shades[f], zorder=3)
+            ax.plot(x, dt, "_", color="black", ms=16, mew=2.2, zorder=5)
+        ax.axhline(0, color="0.25", lw=1.0, zorder=1)
+        ax.set_xticks(xs)
+        ax.set_xticklabels(FAMILIES, fontsize=11)
+        ax.set_title(f"{knob}\n\u27e8\u0394(B\u2212K)\u27e9 = "
+                     f"{d_tot.mean():+.2f} \u00b1 "
+                     f"{d_tot.std(ddof=1):.2f} mag", fontsize=11.5)
+
+    axes[0].set_ylabel("\u0394(B\u2212K) between twins  [mag]")
+    axes[0].annotate("solid: intrinsic (stars) \u00b7 hatched: dust \u00b7 "
+                     "black tick: total",
+                     xy=(0.02, 0.97), xycoords="axes fraction",
+                     va="top", fontsize=9.5, color=GREY)
+    fig.suptitle("Why the color barely moves: stars vs. dust "
+                 "contributions", fontsize=15, y=0.99)
+    fig.text(0.5, 0.015,
+             "bar shade: darker = more massive family \u00b7 "
+             "intrinsic + dust = total by construction",
+             ha="center", va="bottom", fontsize=9.5, color=GREY)
+    fig.subplots_adjust(top=0.80, bottom=0.15, left=0.09, right=0.97,
+                        wspace=0.08)
+    save(fig, outdir, "fig_enterprise_decomposition")
 
 # ---------------------------------------------------------------------------
 
@@ -433,6 +484,7 @@ def main():
     fig_delta_result(df, mstar_fam, args.outdir)
     fig_mass_color_context(df, mstar_by_run, args.outdir)
     fig_bh_selfregulation(mstar_fam, args.outdir)
+    fig_decomposition(df, mstar_fam, args.outdir)
     print("Done.")
 
 
