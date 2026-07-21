@@ -102,9 +102,12 @@ def load_main_halo_stars(snap_path):
     return st[keep], t_now
 
 
-def formation_masses(stars):
+def formation_masses(stars, force_mass=False):
     """massform if loadable, else current mass. Returns (array Msol,
     source string)."""
+    if force_mass:
+        mf = np.asarray(stars["mass"].in_units("Msol"), dtype=float)
+        return mf, "mass"
     try:
         mf = np.asarray(stars["massform"].in_units("Msol"), dtype=float)
         return mf, "massform"
@@ -115,13 +118,13 @@ def formation_masses(stars):
         return mf, "mass"
 
 
-def sfh_one_run(run, dt, sfr_window):
+def sfh_one_run(run, dt, sfr_window, args_force_mass):
     snap = find_snapshot(run)
     print(f"  {run}: {snap.name}")
     stars, t_now = load_main_halo_stars(snap)
 
     tform = np.asarray(stars["tform"].in_units("Gyr"), dtype=float)
-    mform, source = formation_masses(stars)
+    mform, source = formation_masses(stars, force_mass=args_force_mass)
 
     # Fixed bins 0 -> t_now: identical grid for every run so twins
     # overlay bin-for-bin.  (Same math as pynbody.plot.stars.sfh:
@@ -153,6 +156,8 @@ def main():
     ap.add_argument("--sfr-window", type=float, default=0.1,
                     help="recent-SFR averaging window [Gyr] "
                          "(default 0.1 = 100 Myr)")
+    ap.add_argument("--force-mass", action="store_true",
+                    help="Use current mass instead of formation mass")
     args = ap.parse_args()
 
     OUT_SFH.parent.mkdir(parents=True, exist_ok=True)
@@ -167,7 +172,7 @@ def main():
         if run in done:
             print(f"  {run}: done, skipping")
             continue
-        sfh, summary = sfh_one_run(run, args.dt, args.sfr_window)
+        sfh, summary = sfh_one_run(run, args.dt, args.sfr_window, args.force_mass)
 
         # Append-mode writes, header only on first touch (sweep-log style)
         sfh.to_csv(OUT_SFH, mode="a", header=not OUT_SFH.exists(),
