@@ -225,8 +225,8 @@ def fig_delta_result(df, mstar_fam, outdir):
     ax.set_yticklabels(row_labels, fontsize=11)
     ax.set_ylim(-0.55, 1.5)
     ax.set_xlim(-0.45, 0.45)
-    ax.set_xlabel("\u0394(B\u2212K) between twins  [mag]"
-                  "      bluer \u2190 0 \u2192 redder")
+    ax.set_xlabel("\u0394(B\u2212K) between twins  [mag]\n"
+                  "bluer \u2190 0 \u2192 redder", fontsize=11)
     ax.set_title("Changing BH physics barely moves the color")
     from matplotlib.lines import Line2D
     handles = [Line2D([], [], marker="o", linestyle="none", ms=7,
@@ -236,7 +236,7 @@ def fig_delta_result(df, mstar_fam, outdir):
     ax.annotate("colored dots: one twin pair per family \u00b7 "
                 "black: mean \u00b1 std across families",
                 xy=(0.5, -0.32), xycoords="axes fraction",
-                ha="center", fontsize=9, color=GREY)
+                ha="center", fontsize=8, color=GREY)
     fig.tight_layout()
     save(fig, outdir, "fig_enterprise_delta_result")
 
@@ -355,9 +355,10 @@ def fig_mass_color_context(df, mstar_by_run, outdir):
     ax.plot(xs, ys, "o", ms=9, color="0.25", alpha=0.85, linestyle="none")
 
     rho = pd.Series(xs).corr(pd.Series(ys), method="spearman")
-    ax.annotate(f"20 simulated dwarfs \u00b7 Spearman \u03c1 = {rho:+.2f}",
+    ax.annotate(f"20 simulated dwarfs",
                 xy=(0.03, 0.97), xycoords="axes fraction",
                 ha="left", va="top", fontsize=11, color=GREY)
+    ## \u00b7 Spearman \u03c1 = {rho:+.2f}
 
     ax.set_xlabel("log\u2081\u2080  M\u2217 / M\u2299")
     ax.set_ylabel("\u2190 bluer      B\u2212K (Vega)  [mag]      redder \u2192")
@@ -405,7 +406,7 @@ def fig_bh_selfregulation(mstar_fam, outdir):
     f"{delta.mean():+.2f} \u00b1 {delta.std(ddof=1):.2f} dex "
     f"(\u2248\u00d7{10**delta.mean():.0f})"
     """
-    ax.set_ylabel(r"$\log_{10}\; M_{\mathrm{BH}} / M_\odot$   (most massive BH, main halo)")
+    ax.set_ylabel(r"$\log_{10}\; M_{\mathrm{BH}} / M_\odot$   (most massive BH)")
     ## main halo
     fig.suptitle("Weaker feedback \u2192 bigger black holes",
                  fontsize=16, y=0.95)
@@ -420,51 +421,64 @@ def fig_bh_selfregulation(mstar_fam, outdir):
 # Figure 5: why color doesn't budge, show effect on stars vs. dust
 # ---------------------------------------------------------------------------
 
-def fig_decomposition(df, mstar_fam, outdir):
-    """Mechanism summary: each twin-pair color change split into its
-    intrinsic (stellar) and dust contributions.
+def fig_decomposition_single(df, mstar_fam, outdir, pair_idx, stem):
+    """One clean pair: each twin color change split into intrinsic
+    (stellar) and dust contributions.
       solid bar   = intrinsic = \u0394(nodust B\u2212K)
       hatched bar = dust      = \u0394(reddening)
       black tick  = total     = \u0394(dust B\u2212K) = solid + hatched
-    The feedback panel is the payoff: solid bars up, hatched bars
-    down, ticks near zero -- the cancellation made visible."""
+    Independent y-range from THIS pair's data only, zero always
+    included (same rationale as the reddening split: the content is
+    the within-pair decomposition, not cross-pair levels)."""
     p_dust = face_on(df, "dust")
     p_nod = face_on(df, "nodust")
     shades, order = family_colors(mstar_fam)
+    (v0, v1), knob = PAIRS[pair_idx]
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.8, 4.9), sharey=True)
+    d_tot = (p_dust[v1] - p_dust[v0]).loc[FAMILIES].to_numpy(dtype=float)
+    d_int = (p_nod[v1] - p_nod[v0]).loc[FAMILIES].to_numpy(dtype=float)
+    d_dust = d_tot - d_int
+
+    allv = np.concatenate([d_tot, d_int, d_dust, [0.0]])
+    pad = 0.12 * (allv.max() - allv.min())
+    ylo, yhi = allv.min() - pad, allv.max() + pad
+
+    fig, ax = plt.subplots(figsize=(6.8, 5.0))
     w = 0.32
-    for ax, ((v0, v1), knob) in zip(axes, PAIRS):
-        d_tot = (p_dust[v1] - p_dust[v0]).loc[FAMILIES].to_numpy(dtype=float)
-        d_int = (p_nod[v1] - p_nod[v0]).loc[FAMILIES].to_numpy(dtype=float)
-        d_dust = d_tot - d_int
-        xs = np.arange(len(FAMILIES))
-        for x, f, di, dd, dt in zip(xs, FAMILIES, d_int, d_dust, d_tot):
-            ax.bar(x - w / 2, di, width=w, color=shades[f], zorder=3)
-            ax.bar(x + w / 2, dd, width=w, color=shades[f], alpha=0.45,
-                   hatch="//", edgecolor=shades[f], zorder=3)
-            ax.plot(x, dt, "_", color="black", ms=16, mew=2.2, zorder=5)
-        ax.axhline(0, color="0.25", lw=1.0, zorder=1)
-        ax.set_xticks(xs)
-        ax.set_xticklabels(FAMILIES, fontsize=11)
-        ax.set_title(f"{knob}\n\u27e8\u0394(B\u2212K)\u27e9 = "
-                     f"{d_tot.mean():+.2f} \u00b1 "
-                     f"{d_tot.std(ddof=1):.2f} mag", fontsize=11.5)
+    xs = np.arange(len(FAMILIES))
+    for x, f, di, dd, dt in zip(xs, FAMILIES, d_int, d_dust, d_tot):
+        ax.bar(x - w / 2, di, width=w, color=shades[f], zorder=3)
+        ax.bar(x + w / 2, dd, width=w, color=shades[f], alpha=0.45,
+               hatch="//", edgecolor=shades[f], zorder=3)
+        ax.plot(x, dt, "_", color="black", ms=16, mew=2.2, zorder=5)
+    ax.axhline(0, color="0.25", lw=1.0, zorder=1)
+    ax.set_ylim(ylo, yhi)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(FAMILIES, fontsize=11)
+    ax.set_title(f"{knob}\n\u27e8\u0394(B\u2212K)\u27e9 = "
+                 f"{d_tot.mean():+.2f} \u00b1 "
+                 f"{d_tot.std(ddof=1):.2f} mag", fontsize=12)
+    ax.set_ylabel("\u0394(B\u2212K) between twins  [mag]")
+    ax.annotate("solid: intrinsic (stars) \u00b7 hatched: dust \u00b7 "
+                "black tick: total",
+                xy=(0.02, 0.97), xycoords="axes fraction",
+                va="top", fontsize=9.5, color=GREY)
 
-    axes[0].set_ylabel("\u0394(B\u2212K) between twins  [mag]")
-    axes[0].annotate("solid: intrinsic (stars) \u00b7 hatched: dust \u00b7 "
-                     "black tick: total",
-                     xy=(0.02, 0.97), xycoords="axes fraction",
-                     va="top", fontsize=9.5, color=GREY)
     fig.suptitle("Why the color barely moves: stars vs. dust "
                  "contributions", fontsize=15, y=0.99)
     fig.text(0.5, 0.015,
              "bar shade: darker = more massive family \u00b7 "
              "intrinsic + dust = total by construction",
              ha="center", va="bottom", fontsize=9.5, color=GREY)
-    fig.subplots_adjust(top=0.80, bottom=0.15, left=0.09, right=0.97,
-                        wspace=0.08)
-    save(fig, outdir, "fig_enterprise_decomposition")
+    fig.subplots_adjust(top=0.80, bottom=0.13, left=0.14, right=0.97)
+    save(fig, outdir, stem)
+
+
+def fig_decomposition(df, mstar_fam, outdir):
+    fig_decomposition_single(df, mstar_fam, outdir, 0,
+                             "fig_enterprise_decomposition_addBH")
+    fig_decomposition_single(df, mstar_fam, outdir, 1,
+                             "fig_enterprise_decomposition_feedback")
 
 # ---------------------------------------------------------------------------
 
