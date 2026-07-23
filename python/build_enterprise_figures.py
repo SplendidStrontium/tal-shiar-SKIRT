@@ -421,15 +421,16 @@ def fig_bh_selfregulation(mstar_fam, outdir):
 # Figure 5: why color doesn't budge, show effect on stars vs. dust
 # ---------------------------------------------------------------------------
 
-def fig_decomposition_single(df, mstar_fam, outdir, pair_idx, stem):
-    """One clean pair: each twin color change split into intrinsic
-    (stellar) and dust contributions.
-      solid bar   = intrinsic = \u0394(nodust B\u2212K)
-      hatched bar = dust      = \u0394(reddening)
-      black tick  = total     = \u0394(dust B\u2212K) = solid + hatched
-    Independent y-range from THIS pair's data only, zero always
-    included (same rationale as the reddening split: the content is
-    the within-pair decomposition, not cross-pair levels)."""
+def fig_decomposition_component(df, mstar_fam, outdir, pair_idx,
+                                mode, stem):
+    """One clean pair, one layer of the decomposition, one CENTERED
+    bar per family:
+      mode='stars'    \u0394(nodust B\u2212K)      (intrinsic)
+      mode='dust'     \u0394(reddening)
+      mode='combined' \u0394(dust B\u2212K)        (the total, as a bar)
+    All three modes share y-limits, computed from all layers, so the
+    figures sit side-by-side on one slide with aligned axes. Narrow
+    figsize + tight xlim: three across a 16:9 slide."""
     p_dust = face_on(df, "dust")
     p_nod = face_on(df, "nodust")
     shades, order = family_colors(mstar_fam)
@@ -443,42 +444,44 @@ def fig_decomposition_single(df, mstar_fam, outdir, pair_idx, stem):
     pad = 0.12 * (allv.max() - allv.min())
     ylo, yhi = allv.min() - pad, allv.max() + pad
 
-    fig, ax = plt.subplots(figsize=(6.8, 5.0))
-    w = 0.32
+    d, layer, hatch = {
+        "stars":    (d_int,  "intrinsic (stars)", None),
+        "dust":     (d_dust, "dust",              "//"),
+        "combined": (d_tot,  "combined",          None),
+    }[mode]
+
+    fig, ax = plt.subplots(figsize=(4.4, 5.0))
     xs = np.arange(len(FAMILIES))
-    for x, f, di, dd, dt in zip(xs, FAMILIES, d_int, d_dust, d_tot):
-        ax.bar(x - w / 2, di, width=w, color=shades[f], zorder=3)
-        ax.bar(x + w / 2, dd, width=w, color=shades[f], alpha=0.45,
-               hatch="//", edgecolor=shades[f], zorder=3)
-        ax.plot(x, dt, "_", color="black", ms=16, mew=2.2, zorder=5)
+    w = 0.62
+    for x, f, val in zip(xs, FAMILIES, d):
+        if hatch:
+            ax.bar(x, val, width=w, color=shades[f], alpha=0.45,
+                   hatch=hatch, edgecolor=shades[f], zorder=3)
+        else:
+            ax.bar(x, val, width=w, color=shades[f], zorder=3)
     ax.axhline(0, color="0.25", lw=1.0, zorder=1)
     ax.set_ylim(ylo, yhi)
+    ax.set_xlim(-0.65, len(FAMILIES) - 0.35)
     ax.set_xticks(xs)
-    ax.set_xticklabels(FAMILIES, fontsize=11)
-    ax.set_title(f"{knob}\n\u27e8\u0394(B\u2212K)\u27e9 = "
-                 f"{d_tot.mean():+.2f} \u00b1 "
-                 f"{d_tot.std(ddof=1):.2f} mag", fontsize=12)
-    ax.set_ylabel("\u0394(B\u2212K) between twins  [mag]")
-    ax.annotate("solid: intrinsic (stars) \u00b7 hatched: dust \u00b7 "
-                "black tick: total",
-                xy=(0.02, 0.97), xycoords="axes fraction",
-                va="top", fontsize=9.5, color=GREY)
+    ax.set_xticklabels(FAMILIES, fontsize=10)
 
-    fig.suptitle("Why the color barely moves: stars vs. dust "
-                 "contributions", fontsize=15, y=0.99)
+    ax.set_title(f"{layer}\n\u27e8\u0394(B\u2212K)\u27e9 = "
+                 f"{d.mean():+.2f} \u00b1 {d.std(ddof=1):.2f} mag",
+                 fontsize=12)
+    ax.set_ylabel("\u0394(B\u2212K) between twins  [mag]")
     fig.text(0.5, 0.015,
-             "bar shade: darker = more massive family \u00b7 "
-             "intrinsic + dust = total by construction",
-             ha="center", va="bottom", fontsize=9.5, color=GREY)
-    fig.subplots_adjust(top=0.80, bottom=0.13, left=0.14, right=0.97)
+             f"{knob} \u00b7 darker = more massive family",
+             ha="center", va="bottom", fontsize=8.5, color=GREY)
+    fig.subplots_adjust(top=0.87, bottom=0.14, left=0.22, right=0.97)
     save(fig, outdir, stem)
 
 
 def fig_decomposition(df, mstar_fam, outdir):
-    fig_decomposition_single(df, mstar_fam, outdir, 0,
-                             "fig_enterprise_decomposition_addBH")
-    fig_decomposition_single(df, mstar_fam, outdir, 1,
-                             "fig_enterprise_decomposition_feedback")
+    for pair_idx, tag in ((0, "addBH"), (1, "feedback")):
+        for mode in ("stars", "dust", "combined"):
+            fig_decomposition_component(
+                df, mstar_fam, outdir, pair_idx, mode,
+                f"fig_enterprise_decomposition_{tag}_{mode}")
 
 # ---------------------------------------------------------------------------
 
