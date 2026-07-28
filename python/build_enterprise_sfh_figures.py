@@ -120,6 +120,38 @@ def fig_sfh_pair(sfh, mstar_fam, outdir, pair, title, tag, logy=False):
     stem = f"fig_enterprise_sfh_{tag}" + ("_logy" if logy else "")
     save(fig, outdir, stem)
 
+def fig_sfh_feedback_highlight(sfh, mstar_fam, outdir,
+                               families=("r488", "r613"), logy=False):
+    """One standalone figure per family for the BH6->BH8 feedback
+    story, sized identically so they can be placed and animated
+    independently on one slide (typical case r488, extreme case
+    r613). Bottom captions omitted deliberately: spoken aloud.
+    Full five-family version remains the backup slide."""
+    v0, v1 = "BH6", "BH8"
+    shades, _ = family_colors(mstar_fam)
+
+    for fam in families:
+        fig, ax = plt.subplots(figsize=(5.2, 4.0))
+        for v, color, lw, z in ((v0, GREY, 1.8, 3),
+                                (v1, shades[fam], 2.2, 4)):
+            sub = sfh[sfh.run == run_name(fam, v)]
+            if sub.empty:
+                print(f"  WARNING: {run_name(fam, v)} missing from "
+                      f"SFH CSV; skipped")
+                continue
+            ax.step(sub.t_mid, sub.sfr, where="mid",
+                    color=color, lw=lw, zorder=z, label=v)
+        if logy:
+            ax.set_yscale("log")
+        ax.legend(frameon=False, fontsize=11, loc="upper left",
+                  handlelength=1.4, handletextpad=0.4)
+        ax.set_title(fam, fontsize=15, color=shades[fam])
+        ax.set_xlabel("t  [Gyr]", fontsize=12)
+        ax.set_ylabel("SFR  [M\u2299/yr]", fontsize=13)
+        ax.tick_params(labelsize=11)
+        fig.subplots_adjust(top=0.90, bottom=0.15, left=0.15, right=0.96)
+        save(fig, outdir, f"fig_enterprise_sfh_feedback_{fam}")
+
 
 # ---------------------------------------------------------------------------
 # sSFR vs intrinsic color: one clean pair per figure, legend-free markers
@@ -229,6 +261,8 @@ def main():
         fig_sfh_pair(sfh, mstar_fam, args.outdir, pair, title, tag,
                      logy=args.logy)
         fig_ssfr_color_pair(mstar_fam, args.outdir, pair, title, tag)
+    fig_sfh_feedback_highlight(sfh, mstar_fam, args.outdir,
+                               logy=args.logy)
     print("Done.")
 
 

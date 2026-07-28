@@ -205,9 +205,10 @@ def fig_delta_result(df, mstar_fam, outdir):
     """The result figure: twin-pair color deltas hugging zero."""
     pivot = face_on(df, "dust")
     shades, order = family_colors(mstar_fam)
-    row_labels = ["adding a black hole\n(noBH \u2192 BH)",
-                  "feedback \u00d710 weaker\n(BH6 \u2192 BH8)"]
-
+    row_labels = ["adding a black hole",
+                  "feedback \u00d710 weaker"]
+    ## \n(noBH \u2192 BH)
+    ## \n(BH6 \u2192 BH8)
     fig, ax = plt.subplots(figsize=(7.4, 3.9))
     for row, ((v0, v1), _) in enumerate(PAIRS):
         y = 1 - row
@@ -225,18 +226,18 @@ def fig_delta_result(df, mstar_fam, outdir):
     ax.set_yticklabels(row_labels, fontsize=11)
     ax.set_ylim(-0.55, 1.5)
     ax.set_xlim(-0.45, 0.45)
-    ax.set_xlabel("\u0394(B\u2212K) between twins  [mag]\n"
-                  "bluer \u2190 0 \u2192 redder", fontsize=11)
+    ax.set_xlabel("\u0394(B\u2212K) [mag]\n", fontsize=11)
+    ##"bluer \u2190 0 \u2192 redder",
     ax.set_title("Changing BH physics barely moves the color")
     from matplotlib.lines import Line2D
     handles = [Line2D([], [], marker="o", linestyle="none", ms=7,
                       color=shades[f], label=f) for f in order]
     ax.legend(handles=handles, frameon=False, fontsize=9, loc="upper left",
               handletextpad=0.2, borderaxespad=0.2)
-    ax.annotate("colored dots: one twin pair per family \u00b7 "
-                "black: mean \u00b1 std across families",
-                xy=(0.5, -0.32), xycoords="axes fraction",
-                ha="center", fontsize=8, color=GREY)
+    ##ax.annotate("colored dots: one twin pair per family \u00b7 "
+    ##            "black: mean \u00b1 std across families",
+    ##            xy=(0.5, -0.32), xycoords="axes fraction",
+    ##            ha="center", fontsize=8, color=GREY)
     fig.tight_layout()
     save(fig, outdir, "fig_enterprise_delta_result")
 
@@ -400,19 +401,20 @@ def fig_bh_selfregulation(mstar_fam, outdir):
                       annot_prefix="grew")
     ax.set_ylim(ylo, yhi)
     ax.set_xlim(-0.20, 1.65)
-    ax.set_title("feedback efficiency 0.05 \u2192 0.005\n", fontsize=12)
+    ##ax.set_title("feedback efficiency 0.05 \u2192 0.005\n", fontsize=12)
     """
     f"\u27e8\u0394 log\u2081\u2080 M\u2099\u2095\u27e9 = ",
     f"{delta.mean():+.2f} \u00b1 {delta.std(ddof=1):.2f} dex "
     f"(\u2248\u00d7{10**delta.mean():.0f})"
     """
-    ax.set_ylabel(r"$\log_{10}\; M_{\mathrm{BH}} / M_\odot$   (most massive BH)")
+    ax.set_ylabel(r"$\log_{10}\; M_{\mathrm{BH}} / M_\odot$")
+    ## (most massive BH)
     ## main halo
     fig.suptitle("Weaker feedback \u2192 bigger black holes",
-                 fontsize=16, y=0.95)
-    fig.text(0.5, 0.015,
-         r"“grew ×N” = $M_{\mathrm{BH}}$ ratio BH8/BH6",
-         ha="center", va="bottom", fontsize=9.5, color=GREY)
+                 fontsize=16, y=0.9)
+    ##fig.text(0.5, 0.015,
+    ##     r"“grew ×N” = $M_{\mathrm{BH}}$ ratio BH8/BH6",
+    ##     ha="center", va="bottom", fontsize=9.5, color=GREY)
     ## self-regulation: BHs grow until their feedback compensates
     fig.subplots_adjust(top=0.80, bottom=0.14, left=0.15, right=0.97)
     save(fig, outdir, "fig_enterprise_bh_selfregulation")
@@ -465,13 +467,13 @@ def fig_decomposition_component(df, mstar_fam, outdir, pair_idx,
     ax.set_xticks(xs)
     ax.set_xticklabels(FAMILIES, fontsize=10)
 
-    ax.set_title(f"{layer}\n\u27e8\u0394(B\u2212K)\u27e9 = "
-                 f"{d.mean():+.2f} \u00b1 {d.std(ddof=1):.2f} mag",
-                 fontsize=12)
-    ax.set_ylabel("\u0394(B\u2212K) between twins  [mag]")
-    fig.text(0.5, 0.015,
-             f"{knob} \u00b7 darker = more massive family",
-             ha="center", va="bottom", fontsize=8.5, color=GREY)
+    ax.set_title(f"{layer}",
+                 fontsize=14)
+    ##\n\u27e8\u0394(B\u2212K)\u27e9 = "f"{d.mean():+.2f} \u00b1 {d.std(ddof=1):.2f} mag
+    ax.set_ylabel("\u0394(B\u2212K) [mag]")
+    ##fig.text(0.5, 0.015,
+    ##         f"{knob} \u00b7 darker = more massive family",
+    ##         ha="center", va="bottom", fontsize=8.5, color=GREY)
     fig.subplots_adjust(top=0.87, bottom=0.14, left=0.22, right=0.97)
     save(fig, outdir, stem)
 
