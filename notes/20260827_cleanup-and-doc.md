@@ -5,4 +5,4 @@
 - /old scripts formerly floating into their own folder
 - README redone for completed summer 2026 work
 - correct docstrings
-- gotchas.md added as tips that were found along the way
+- GOTCHAS.md added as tips that were found along the way
