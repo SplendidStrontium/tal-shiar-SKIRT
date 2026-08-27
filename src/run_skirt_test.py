@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 run_skirt_test.py — Tal Shiar SKIRT Pipeline, test driver
+(adapted for "Enterprise" sub-project)
 
 Runs a low-photon validation of the SKIRT setup for one halo at a single
 inclination (face-on by default) with both the dust and no-dust ski files,
@@ -8,7 +9,7 @@ then projects the cost of the full face-on production sweep.
 
 What this does:
     1. Reads the production {galaxy}_dust.ski / {galaxy}_nodust.ski files
-       from the ski directory (src/ski/).
+       from the ski directory (src/ski_enterprise/).
     2. Rewrites them with (a) test photon count, (b) test pixel count,
        (c) only the requested inclinations, into a test_runs/ subdir
     3. Runs `skirt -e` (emulation mode) on each to catch schema errors
@@ -16,24 +17,24 @@ What this does:
     4. Runs SKIRT for real with timing telemetry
     5. Prints per-run wall time and projects production cost
 
-Why a separate driver instead of re-running generate_ski.py:
+Why a separate driver instead of re-running generate_ski_enterprise.py:
     - Production .ski files stay pristine (no test-parameter contamination)
     - Test output goes into test_runs/ and doesn't pollute production output
     - Lets you iterate on test configs (photon count, inclinations, pixels)
-      without touching generate_ski.py
+      without touching generate_ski_enterprise.py
 
 Usage:
     # Default: galaxy..., face-on, 1e6 photons, 256 pixels
     python run_skirt_test.py
 
     # A different halo
-    python run_skirt_test.py --galaxy r320
+    python run_skirt_test.py --galaxy r488
 
     # More photons
     python run_skirt_test.py --photons 5e6
 
 Assumes the halo's particle files live at
-/mnt/data0/pkrsnak/romulus/{galaxy}/ (override with --particle-dir).
+/mnt/data0/pkrsnak/romulus/enterprise/products/{galaxy}/particles (override with --particle-dir).
 """
 
 import argparse
@@ -57,7 +58,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent          # .../tal-shiar-SKIRT/src
 DEFAULT_SKI_DIR = SCRIPT_DIR / SKI_DIRNAME             # .../src/ski_enterprise
 
 # Production configuration this test projects toward (kept in sync with
-# generate_ski.py). Used only for the cost projection at the end.
+# generate_ski_enterprise.py). Used only for the cost projection at the end.
 PROD_PHOTONS = 5e7
 N_RUNS = 20             # full dust+nodust sweep is 2 x N_RUNS SKIRT runs
 
@@ -193,7 +194,7 @@ def main():
                         help="Run to test (e.g. r741, r488_BH8)")
     parser.add_argument("--particle-dir", default=None,
                         help="Dir with stars.txt, youngStars.txt, gas.txt "
-                             "(default: /mnt/data0/pkrsnak/romulus/enterprise/{galaxy})")
+                             "(default: /mnt/data0/pkrsnak/romulus/enterprise/products/{galaxy}/particles")
     parser.add_argument("--ski-dir", default=None,
                         help=f"Directory containing {{galaxy}}_dust.ski / "
                              f"{{galaxy}}_nodust.ski (default: {DEFAULT_SKI_DIR})")

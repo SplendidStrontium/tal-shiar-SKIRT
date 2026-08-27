@@ -32,6 +32,8 @@ Usage:
         # style, wavelength span, N points) and the B/K/B-K numbers for
         # every SED belonging to r741. Sanity-check the header parse and
         # that face-on dust B-K lands in a plausible dwarf range (~1-4).
+        # full-instrument rows shown for completeness, only sed_rows
+        # are science-valid
 
     python extract_enterprise_colors.py --all
         # Full extraction -> enterprise_colors.csv (long format) in
@@ -265,9 +267,7 @@ def extract(df_files, verbose=False):
 
 def pick_one_per_cell(df):
     """One row per (run, medium, inc_deg): if both a FullInstrument and a
-    SEDInstrument SED exist for the same view, prefer the SED instrument
-    (pure integrated SED; the Full one is identical in principle but keep
-    the choice explicit and printed)."""
+    SEDInstrument SED exist for the same view, prefer the SED instrument"""
     def rank(inst):
         return 0 if "sed" in inst.lower() else 1
     d = df.copy()

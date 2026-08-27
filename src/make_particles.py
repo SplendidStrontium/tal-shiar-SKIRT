@@ -14,15 +14,16 @@ What this script does:
        angles physically meaningful: cos(i) = |v_hat . z_hat|.
     5. Converts all quantities to physical units (pc, Msol, km/s, yr)
     6. Applies a spatial cut to remove outlier particles
-    7. Saves particle arrays as .npy files for SKIRT
+    7. writes stars.txt, youngStars.txt, gas.txt for SKIRT, 
+       diagnostics.csv, orientation_info.txt for provenance,
+       .npy arrays as legacy NIHAO convention; nothing currently reads
 
-Orientation correction (new in this version):
+
+Orientation correction:
     The galaxy disk is not guaranteed to be aligned with the simulation's x-y
-    plane. Without reorientation, the viewing directions produced by
-    sampleOrientations.py have no well-defined inclination, and A(lambda, i)
-    vs inclination plots are meaningless. We fix this by rotating the snapshot
-    so the angular momentum vector of a disk tracer (cold gas preferred, young
-    stars as fallback) points along +z BEFORE extracting particle arrays.
+    plane. We fix this by rotating the snapshot so the angular momentum vector 
+    of a disk tracer (cold gas preferred, young stars as fallback) 
+    points along +z BEFORE extracting particle arrays.
 
     Tracer selection is a cascading fallback:
         1. Cold gas (T < 3e4 K) within 10 kpc, if mass > 1e8 Msol
@@ -42,7 +43,7 @@ What this script does NOT do (yet):
 
 Adapted from NIHAO-SKIRT-Pipeline/bin/makeParticles.py          
 Key differences from NIHAO version:
-    - Uses pynbody-native centering on the stellar center-of-mass
+    - Uses shrinking-sphere on the full halo, DM included
     - Applies orientation correction via pynbody.analysis.angmom.faceon before extraction
     - Field mapping: uses 'smooth' (not 'eps'), 'mass' (no 'massform'),
       'age' derived from 'tform'
@@ -87,7 +88,7 @@ MIN_YOUNG_STAR_MASS = 1e7
 # Groves+2008 sets the birth cloud clearing timescale at ~10 Myr.
 YOUNG_STAR_CUTOFF_YR = 1e7
 
-# HII region parameters for MAPPINGS (literature defaults, mentor-review-pending).
+# HII region parameters for MAPPINGS (literature defaults, assumed-unreviewed).
 # These are not simulation outputs; they are assumed values for all young
 # particles. Sources:
 #   logC = 5:         Groves+2008, middle-of-range compactness
@@ -270,7 +271,7 @@ def extract_star_properties(halo):
 
     # Romulus (GASOLINE/ChaNGa) stores BHs in the star family with tform < 0.
     # They are not stellar populations: exclude before SED assignment / mass counting.
-    is_star = np.asarray(halo.star['tform']) >= 0
+    is_star = np.asarray(halo.star['tform']) > 0
     n_bh = int((~is_star).sum())
     if n_bh > 0:
         bh_mass = float(halo.star['mass'].in_units('Msol')[~is_star].sum())
@@ -372,7 +373,7 @@ def spatial_cut(stars, gas, radius_pc):
 
 def save_particles(stars, gas, output_dir, tracer_name):
     """
-    Save particle data as .npy files that downstream SKIRT scripts expect.
+    Save particle data as .npy files; NIHAO-SKIRT convention, not currently used.
 
     Output format matches NIHAO-SKIRT convention:
         stars.npy — columns: x, y, z, smooth, vx, vy, vz, mass, metals, age
@@ -451,11 +452,9 @@ def write_skirt_text_files(stars, gas, output_dir):
         x y z h vx vy vz SFR Z logC p f_PDR
         [pc pc pc pc km/s km/s km/s Msol/yr 1 1 Pa 1]
 
-    gas.txt (THEMIS medium, 9 columns — matches NIHAO customWLG.ski):
-        x y z h M Z T vx vy
-        [pc pc pc pc Msol 1 K km/s km/s]
-        (velocity not imported in our .ski, but columns must be present
-         for SKIRT to parse correctly if importVelocity is ever flipped on)
+    gas.txt (THEMIS medium, 7 columns):
+        x y z h M Z T
+        [pc pc pc pc Msol 1 K]
 
     NOTE on SFR for young particles:
         MAPPINGS wants initial mass / 10 Myr. Romulus does not record
@@ -572,7 +571,7 @@ def write_skirt_text_files(stars, gas, output_dir):
               f"ΣSFR = {(stars['mass'][young_mask] / YOUNG_STAR_CUTOFF_YR).sum():.3f} Msol/yr, "
               f"Z_range = [{stars['metals'][young_mask].min():.4f}, {stars['metals'][young_mask].max():.4f}]")
         print(f"                    logC={MAPPINGS_LOGC}, p={MAPPINGS_PRESSURE_PA:.2e} Pa, "
-              f"f_PDR={MAPPINGS_F_PDR} (literature defaults, mentor-review-pending)")
+              f"f_PDR={MAPPINGS_F_PDR} (literature defaults, assumed-unreviewed)")
     else:
         print(f"  youngStars.txt  — 0 particles (galaxy is quiescent over <{YOUNG_STAR_CUTOFF_YR:.0e} yr)")
     print(f"  gas.txt         — {len(gas['x_pos'])} particles, "
